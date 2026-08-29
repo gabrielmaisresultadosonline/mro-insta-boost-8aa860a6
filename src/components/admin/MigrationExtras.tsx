@@ -377,6 +377,14 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est�
       action: exportGuide,
       label: "Baixar guia de migração",
     },
+    {
+      id: "secrets",
+      icon: ShieldAlert,
+      title: "secrets.env preenchido",
+      desc: "Exige a senha de admin. Gera o arquivo com os valores reais das chaves para colar no VPS.",
+      action: exportSecrets,
+      label: "Exportar secrets (.env)",
+    },
   ];
 
   return (
