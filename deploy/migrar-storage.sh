@@ -28,6 +28,17 @@ set -a; . "$STACK/.env"; set +a
 
 command -v node >/dev/null 2>&1 || die "node não instalado (apt-get install -y nodejs)"
 
+# Confirma apenas o papel declarado no JWT, sem imprimir ou registrar a chave.
+jwt_role="$(LOCAL_SERVICE_KEY="${SERVICE_ROLE_KEY:-}" node -e '
+  try {
+    const token = process.env.LOCAL_SERVICE_KEY || "";
+    const payload = token.split(".")[1] || "";
+    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    process.stdout.write(String(json.role || ""));
+  } catch { process.stdout.write(""); }
+')"
+[ "$jwt_role" = "service_role" ] || die "SERVICE_ROLE_KEY local inválida: o JWT não declara role=service_role"
+
 export CLOUD_URL="${CLOUD_URL:-https://aossudsganqiapcoqthe.supabase.co}"
 export CLOUD_ANON="${CLOUD_ANON:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvc3N1ZHNnYW5xaWFwY29xdGhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NjUyOTQsImV4cCI6MjA5NDI0MTI5NH0.iXRkC4lymM_vVOYI1Q2AfrXBxRa-9gTIpMX6jGVnCgQ}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-Ga145523@}"
@@ -40,11 +51,15 @@ sec "Corrigindo permissões administrativas do Storage"
 DB="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${PG_PORT:-5432}/${POSTGRES_DB:-postgres}"
 command -v psql >/dev/null 2>&1 || die "psql não instalado"
 psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+ALTER ROLE service_role BYPASSRLS;
 ALTER ROLE supabase_storage_admin CREATEROLE BYPASSRLS;
 GRANT anon, authenticated, service_role TO supabase_storage_admin;
 GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
+GRANT USAGE ON SCHEMA storage TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA storage TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA storage TO service_role;
 SQL
 ( cd "$STACK" && docker compose up -d storage >/dev/null )
 # O nginx resolve TODOS os upstreams (auth/rest/realtime/storage/functions) ao

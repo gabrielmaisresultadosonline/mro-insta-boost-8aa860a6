@@ -167,6 +167,7 @@ BEGIN
   EXECUTE format('ALTER ROLE pgbouncer                PASSWORD %L', p);
   EXECUTE 'ALTER ROLE supabase_admin SUPERUSER';
   EXECUTE 'ALTER ROLE supabase_auth_admin CREATEROLE';
+  EXECUTE 'ALTER ROLE service_role BYPASSRLS';
   EXECUTE 'ALTER ROLE supabase_storage_admin CREATEROLE BYPASSRLS';
 END \$\$;
 
@@ -187,6 +188,8 @@ CREATE SCHEMA IF NOT EXISTS vault          AUTHORIZATION supabase_admin;
 GRANT USAGE ON SCHEMA public, extensions, auth, storage TO anon, authenticated, service_role;
 GRANT ALL ON SCHEMA auth    TO supabase_auth_admin;
 GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA storage TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA storage TO service_role;
 SQLBOOT
 ok "roles e schemas prontos"
 

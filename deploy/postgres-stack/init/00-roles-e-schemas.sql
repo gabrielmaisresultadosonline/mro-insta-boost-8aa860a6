@@ -15,6 +15,8 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+  ELSE
+    ALTER ROLE service_role BYPASSRLS;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN
     EXECUTE format('CREATE ROLE authenticator LOGIN NOINHERIT PASSWORD %L', :'pgpass');
@@ -65,6 +67,8 @@ GRANT USAGE ON SCHEMA public     TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA auth       TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA storage    TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA storage TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA storage TO service_role;
 
 -- Compatibilidade com o código existente: auth.uid() / auth.role() / auth.jwt()
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb
