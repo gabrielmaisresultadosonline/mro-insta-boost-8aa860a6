@@ -14,7 +14,14 @@ Deno.serve(async (req: Request) => {
 
   const url = new URL(req.url);
   const name = url.pathname.replace(/^\/+/, "").split("/")[0];
-  if (!name) return new Response("missing function name", { status: 404, headers: CORS });
+  // Endpoint sem nome usado pelo monitoramento da stack. Não tenta carregar uma
+  // função e confirma apenas que o Edge Runtime e o roteador estão respondendo.
+  if (!name) {
+    return new Response(JSON.stringify({ status: "ok", service: "functions" }), {
+      status: 200,
+      headers: { ...CORS, "Content-Type": "application/json" },
+    });
+  }
 
   const servicePath = `/home/deno/functions/${name}`;
   try {
