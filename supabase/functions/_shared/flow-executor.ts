@@ -72,7 +72,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
         console.log(`[EXECUTOR] Invoking meta-whatsapp-crm action=sendMessage for interactive buttons. ReplyButtons: ${replyButtons.length}`);
         const { data: result, error: invokeError } = await supabase.functions.invoke('meta-whatsapp-crm', {
           headers: {
-            'Authorization': `Bearer INTERNAL_BYPASS`
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
           },
           body: { 
             action: 'sendMessage', 
@@ -129,7 +129,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
             interactive.header = { type: 'video', video: { link: videoUrl } };
           }
           await supabase.functions.invoke('meta-whatsapp-crm', {
-            headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
             body: {
               action: 'sendMessage',
               to: waId,
@@ -158,7 +158,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
         console.log(`[EXECUTOR] Invoking meta-whatsapp-crm action=sendMessage for text`);
         const { data: result, error: invokeError } = await supabase.functions.invoke('meta-whatsapp-crm', {
           headers: {
-            'Authorization': `Bearer INTERNAL_BYPASS`
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
           },
           body
         });
@@ -259,7 +259,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
       if (mediaUrl) {
         console.log(`[FLOW-LOG] Calling meta-whatsapp-crm action=sendMessage for ${node.type}`);
         const { data: result, error: invokeError } = await supabase.functions.invoke('meta-whatsapp-crm', {
-          headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: { 
             action: 'sendMessage', 
             to: waId, 
@@ -289,7 +289,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
       if (templateName) {
         console.log(`[EXECUTOR] Enviando template ${templateName} para ${waId}`);
         const { data: result, error: invokeError } = await supabase.functions.invoke('meta-whatsapp-crm', {
-          headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: { action: 'sendTemplate', to: waId, templateName, languageCode: node.data?.language || 'pt_BR', contactId }
         });
         if (invokeError) {
@@ -394,7 +394,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
       // Exceto se configurado para aguardar a primeira resposta
       if (node.data?.wait_response_before_start !== true) {
         await supabase.functions.invoke('meta-whatsapp-crm', {
-          headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: { 
             action: 'processAiAgent', 
             contactId: contactId, 
@@ -501,12 +501,12 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
       const pixCode = `00020126580014br.gov.bcb.pix01${pixKey.length.toString().padStart(2, '0')}${pixKey}520400005303986540${amount.length.toString().padStart(2, '0')}${amount}5802BR5913ZAP_MRO_CRM6009SAO_PAULO62070503***6304abcd`;
 
       await supabase.functions.invoke('meta-whatsapp-crm', {
-        headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+        headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
         body: { action: 'sendMessage', to: waId, text: pixText, contactId }
       });
 
       await supabase.functions.invoke('meta-whatsapp-crm', {
-        headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+        headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
         body: { action: 'sendMessage', to: waId, text: pixCode, contactId }
       });
 
@@ -525,7 +525,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
 
       if (kind === 'link' && /^https?:\/\//i.test(rawValue)) {
         await supabase.functions.invoke('meta-whatsapp-crm', {
-          headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: {
             action: 'sendMessage', to: waId, contactId, nodeId: node.id,
             meta_phone_number_id: settings?.meta_phone_number_id,
@@ -541,7 +541,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
         // PIX / código copia e cola: mensagem de texto + o código puro em bolha separada,
         // que o WhatsApp já permite copiar nativamente (toque e segure / clique).
         await supabase.functions.invoke('meta-whatsapp-crm', {
-          headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: {
             action: 'sendMessage', to: waId, text: bodyText, contactId, nodeId: node.id,
             meta_phone_number_id: settings?.meta_phone_number_id,
@@ -551,7 +551,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
         if (rawValue) {
           await wait(600);
           await supabase.functions.invoke('meta-whatsapp-crm', {
-            headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+            headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
             body: {
               action: 'sendMessage', to: waId, text: rawValue, contactId,
               meta_phone_number_id: settings?.meta_phone_number_id,
@@ -574,7 +574,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
 
       if (headerText) {
         await supabase.functions.invoke('meta-whatsapp-crm', {
-          headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: {
             action: 'sendMessage', to: waId, text: headerText, contactId, nodeId: node.id,
             meta_phone_number_id: settings?.meta_phone_number_id,
@@ -597,7 +597,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
           // If there are reply buttons: send interactive with media header + buttons
           if (replyButtons.length > 0 && mediaUrl) {
             await supabase.functions.invoke('meta-whatsapp-crm', {
-              headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+              headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
               body: {
                 action: 'sendMessage', to: waId, contactId, nodeId: node.id,
                 meta_phone_number_id: settings?.meta_phone_number_id,
@@ -619,7 +619,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
           } else if (mediaUrl) {
             // No reply buttons: send plain media with caption
             await supabase.functions.invoke('meta-whatsapp-crm', {
-              headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+              headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
               body: {
                 action: 'sendMessage', to: waId, contactId, nodeId: node.id,
                 [mediaType + 'Url']: mediaUrl,
@@ -631,7 +631,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
           } else if (caption) {
             // Card without media: send caption as text
             await supabase.functions.invoke('meta-whatsapp-crm', {
-              headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+              headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
               body: {
                 action: 'sendMessage', to: waId, text: caption, contactId, nodeId: node.id,
                 meta_phone_number_id: settings?.meta_phone_number_id,
@@ -659,7 +659,7 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
               }
             };
             await supabase.functions.invoke('meta-whatsapp-crm', {
-              headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+              headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
               body: {
                 action: 'sendMessage', to: waId, contactId,
                 meta_phone_number_id: settings?.meta_phone_number_id,
