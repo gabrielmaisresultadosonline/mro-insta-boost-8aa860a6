@@ -3020,12 +3020,19 @@ const CRM = () => {
     setIsScheduling(true);
     try {
       // 1. Garantir que o contato existe ou criar um temporário/persistente
-      let { data: contact } = await supabase.from('crm_contacts').select('id').eq('wa_id', birthdayNumber).maybeSingle();
+      const { data: { user: bdayUser } } = await supabase.auth.getUser();
+      let { data: contact } = await supabase
+        .from('crm_contacts')
+        .select('id')
+        .eq('wa_id', birthdayNumber)
+        .eq('user_id', bdayUser?.id ?? '')
+        .maybeSingle();
       
       if (!contact) {
         const { data: newContact, error: createError } = await supabase.from('crm_contacts').insert({
           wa_id: birthdayNumber,
           name: birthdayName,
+          user_id: bdayUser?.id,
           status: 'new',
           source_type: 'system'
         }).select().single();
