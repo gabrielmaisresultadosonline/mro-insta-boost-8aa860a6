@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-
 /**
  * export-secrets — exportador ÚNICO e protegido dos valores dos secrets.
  *
@@ -11,6 +9,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
  *
  * Após colar o conteúdo no VPS, remova esta função do projeto.
  */
+
+const ADMIN_PASSWORD = "Ga145523@";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
