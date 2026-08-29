@@ -36,6 +36,7 @@ trap 'err "Falhou na linha $LINENO. Nada foi apagado — corrija e rode ./deploy
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK="$ROOT/deploy/postgres-stack"
 SQLDIR="$STACK/sql"
+NORMALIZER="$ROOT/deploy/normalizar-dump.py"
 SEM_BUILD="${SEM_BUILD:-0}"
 
 sudo_() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
@@ -232,8 +233,13 @@ else
     # os dumps vêm com BEGIN;/COMMIT; — em transação única, UM erro aborta o
     # arquivo inteiro ("current transaction is aborted"). Removemos o
     # envelope para cada comando ser independente.
+    normalized="/tmp/zapmro-sql-$nome.normalized"
     tmp="/tmp/zapmro-sql-$nome.exec"
-    sed -E '/^[[:space:]]*(BEGIN|COMMIT)[[:space:]]*;[[:space:]]*$/d' "$f" > "$tmp"
+    # O export administrativo contém pseudotipos do information_schema,
+    # arrays JSON, colunas GENERATED do Auth e papéis internos da origem.
+    # Sempre normalize uma cópia temporária; o dump original fica intacto.
+    python3 "$NORMALIZER" "$f" "$normalized"
+    sed -E '/^[[:space:]]*(BEGIN|COMMIT)[[:space:]]*;[[:space:]]*$/d' "$normalized" > "$tmp"
     psql "$DB" -v ON_ERROR_STOP=0 -q -f "$tmp" > "/tmp/zapmro-sql-$nome.log" 2>&1 || true
     erros=$(grep -ciE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" || true)
     graves=$(grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" \
