@@ -47,10 +47,11 @@ GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
 SQL
 ( cd "$STACK" && docker compose up -d storage >/dev/null )
-# O nginx resolve o upstream "storage" quando inicia. Reiniciá-lo depois do
-# Storage evita manter endereço/conexões antigas e responder 502 durante toda a
-# migração caso o container tenha sido recriado.
-( cd "$STACK" && docker compose restart gateway >/dev/null )
+# O nginx resolve TODOS os upstreams (auth/rest/realtime/storage/functions) ao
+# iniciar. Um simples `restart gateway` falha se qualquer container não existir
+# na rede, como ocorreu com "host not found in upstream realtime". `up gateway`
+# cria/inicia as dependências declaradas e só então inicia o gateway.
+( cd "$STACK" && docker compose up -d gateway >/dev/null )
 ok "papéis anon/authenticated/service_role liberados para o Storage"
 
 sec "Esperando a stack local responder"
