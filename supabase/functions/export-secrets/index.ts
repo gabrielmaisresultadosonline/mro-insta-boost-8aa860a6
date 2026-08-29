@@ -85,22 +85,8 @@ Deno.serve(async (req) => {
       return json({ error: "Senha obrigatória" }, 401);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
-
-    const { data, error } = await supabase
-      .from("license_settings")
-      .select("admin_password")
-      .limit(1)
-      .single();
-
-    if (error || !data) {
-      return json({ error: "Configuração de admin não encontrada" }, 500);
-    }
-
-    if (password !== String(data.admin_password).trim()) {
+    // Mesma credencial usada pelo painel /admincentral (crm-central-admin).
+    if (password !== ADMIN_PASSWORD) {
       console.warn("[export-secrets] tentativa com senha inválida");
       return json({ error: "Senha incorreta" }, 401);
     }
