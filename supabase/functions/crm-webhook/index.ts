@@ -65,12 +65,17 @@ serve(async (req) => {
       }
     }
 
-    // Get Meta Settings
+    // Get Meta Settings DO DONO do webhook (isolamento multi-tenant)
+    const ownerId = webhook.user_id
+    if (!ownerId) {
+      throw new Error('Webhook sem dono definido (user_id). Recrie o webhook no CRM.')
+    }
+
     const { data: settings } = await supabase
       .from('crm_settings')
       .select('*')
-      .eq('id', '00000000-0000-0000-0000-000000000001')
-      .single()
+      .eq('user_id', ownerId)
+      .maybeSingle()
 
     if (!settings?.meta_access_token || !settings?.meta_phone_number_id) {
       throw new Error('CRM Meta settings not configured')
