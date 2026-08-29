@@ -299,7 +299,12 @@ fi
 # --------------------------------------------------------------- 9) validação -
 sec "9/9 Validação"
 G="http://127.0.0.1:${GATEWAY_PORT:-8000}"
-chk() { printf '  %-24s' "$1"; if curl -sf -m 10 "$2" ${3:+-H "$3"} >/dev/null 2>&1; then echo -e "${C_G}OK${N}"; else echo -e "${C_R}FALHOU${N}"; fi; }
+chk() { # OK = serviço respondeu HTTP (404 de rota-raiz não é falha; 000 = fora do ar)
+  local code
+  printf '  %-24s' "$1"
+  code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$2" ${3:+-H "$3"} 2>/dev/null || echo 000)
+  if [ "$code" != "000" ] && [ "${code:0:1}" != "5" ]; then echo -e "${C_G}OK${N} (HTTP $code)"; else echo -e "${C_R}FALHOU${N} (HTTP $code)"; fi
+}
 chk "gateway"   "$G/health"
 chk "auth"      "$G/auth/v1/health"
 chk "rest"      "$G/rest/v1/"    "apikey: ${ANON_KEY}"
