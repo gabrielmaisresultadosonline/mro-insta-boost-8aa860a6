@@ -15,6 +15,13 @@
       "when": 1787950876514,
       "tag": "0001_admin_dump_full_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788028920862,
+      "tag": "0002_fix_admin_dump_policies_ambiguous_roles",
+      "breakpoints": true
     }
   ]
 }
