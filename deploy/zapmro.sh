@@ -274,6 +274,14 @@ EOF
     echo "  contatos CRM     : $(psql "$D" -tAc "select count(*) from public.crm_contacts" 2>/dev/null || echo '?')"
     echo "  mensagens CRM    : $(psql "$D" -tAc "select count(*) from public.crm_messages" 2>/dev/null || echo '?')"
     echo "  jobs cron        : $(psql "$D" -tAc "select count(*) from cron.job" 2>/dev/null || echo '?')"
+    # ISOLAMENTO: sem RLS/policies TODO usuário enxerga os dados de TODOS.
+    rls_on="$(psql "$D" -tAc "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and c.relrowsecurity" 2>/dev/null || echo 0)"
+    pols="$(psql "$D" -tAc "select count(*) from pg_policies where schemaname='public'" 2>/dev/null || echo 0)"
+    echo "  tabelas com RLS  : ${rls_on}"
+    echo "  policies (RLS)   : ${pols}"
+    if [ "${pols:-0}" -lt 100 ] || [ "${rls_on:-0}" -lt 100 ]; then
+      warn "ISOLAMENTO INCOMPLETO — rode: ./deploy/atualizar.sh (aplica 081-rls-policies.sql)"
+    fi
     echo
     echo "  frontend aponta  : $(grep -m1 VITE_SUPABASE_URL "$ROOT/.env" 2>/dev/null | cut -d= -f2- || echo '?')"
     ;;
