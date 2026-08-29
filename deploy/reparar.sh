@@ -64,10 +64,19 @@ BEGIN
 END \$\$;
 
 GRANT anon, authenticated, service_role TO authenticator;
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_admin;
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_auth_admin;
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_storage_admin;
 CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS auth       AUTHORIZATION supabase_auth_admin;
 CREATE SCHEMA IF NOT EXISTS storage    AUTHORIZATION supabase_storage_admin;
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pg_cron') THEN
+    DROP SCHEMA IF EXISTS cron CASCADE;
+  END IF;
+END \$\$;
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 ALTER SCHEMA auth    OWNER TO supabase_auth_admin;
 ALTER SCHEMA storage OWNER TO supabase_storage_admin;
@@ -169,7 +178,8 @@ else
     normalized="/tmp/zapmro-rep-$nome.normalized"
     tmp="/tmp/zapmro-rep-$nome.exec"
     python3 "$NORMALIZER" "$f" "$normalized"
-    sed -E '/^[[:space:]]*(BEGIN|COMMIT|END)[[:space:]]*;[[:space:]]*$/d' "$normalized" > "$tmp"
+    # Remove somente o envelope externo. END; fecha blocos PL/pgSQL.
+    sed -E '/^[[:space:]]*(BEGIN|COMMIT)[[:space:]]*;[[:space:]]*$/d' "$normalized" > "$tmp"
     psql "$DB" -v ON_ERROR_STOP=0 -q -f "$tmp" > "/tmp/zapmro-rep-$nome.log" 2>&1 || true
     # Objetos que acabaram de ser criados devem voltar imediatamente ao dono
     # esperado pelos serviços, inclusive se outro arquivo falhar depois.
@@ -209,10 +219,19 @@ SQL
 fi
 shopt -u nullglob
 
+psql "$DB" -v ON_ERROR_STOP=1 -q <<SQL
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_storage_admin;
+GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
+GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_storage_admin IN SCHEMA storage
+  GRANT ALL ON TABLES TO supabase_storage_admin;
+SQL
+
 # ------------------------------------------------------- 4) reiniciar stack ---
 sec "4/5 Reiniciando os serviços e esperando cada um responder"
 ( cd "$STACK" && docker compose up -d >/dev/null 2>&1 ) || true
-( cd "$STACK" && docker compose restart rest auth storage realtime functions >/dev/null 2>&1 ) || true
+( cd "$STACK" && docker compose restart rest auth storage realtime functions gateway >/dev/null 2>&1 ) || true
 
 espera() { # espera <nome> <url>
   local nome="$1" url="$2" code

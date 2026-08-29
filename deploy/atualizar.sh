@@ -171,6 +171,9 @@ BEGIN
 END \$\$;
 
 GRANT anon, authenticated, service_role TO authenticator;
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_admin;
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_auth_admin;
+GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_storage_admin;
 GRANT ALL ON SCHEMA public TO postgres, supabase_admin;
 
 CREATE SCHEMA IF NOT EXISTS extensions     AUTHORIZATION supabase_admin;
@@ -180,8 +183,6 @@ CREATE SCHEMA IF NOT EXISTS realtime       AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS _realtime      AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS graphql_public AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS vault          AUTHORIZATION supabase_admin;
-CREATE SCHEMA IF NOT EXISTS cron;
-
 GRANT USAGE ON SCHEMA public, extensions, auth, storage TO anon, authenticated, service_role;
 GRANT ALL ON SCHEMA auth    TO supabase_auth_admin;
 GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
@@ -212,7 +213,7 @@ else
     # arquivo inteiro ("current transaction is aborted"). Removemos o
     # envelope para cada comando ser independente.
     tmp="/tmp/zapmro-sql-$nome.exec"
-    sed -E '/^[[:space:]]*(BEGIN|COMMIT|END)[[:space:]]*;[[:space:]]*$/d' "$f" > "$tmp"
+    sed -E '/^[[:space:]]*(BEGIN|COMMIT)[[:space:]]*;[[:space:]]*$/d' "$f" > "$tmp"
     psql "$DB" -v ON_ERROR_STOP=0 -q -f "$tmp" > "/tmp/zapmro-sql-$nome.log" 2>&1 || true
     erros=$(grep -ciE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" || true)
     graves=$(grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" \

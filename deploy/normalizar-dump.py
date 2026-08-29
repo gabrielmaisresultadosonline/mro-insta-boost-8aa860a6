@@ -7,7 +7,7 @@ e pode ser reaplicada com segurança pelo reparar.sh.
 Correções aplicadas:
   1. `USER-DEFINED` / `ARRAY` (categorias do information_schema) viram tipos reais.
   2. Corpos de função sem o `;` final ganham o terminador.
-  3. `confirmed_at` (GENERATED ALWAYS no GoTrue atual) sai dos INSERT de auth.users.
+  3. Colunas GENERATED da versão atual do GoTrue saem dos INSERTs de Auth.
   4. Literais JSON (`[...]`) destinados a colunas text[] viram literais de array.
 """
 
@@ -115,14 +115,18 @@ def fix_function_terminators(text: str) -> str:
 # --------------------------------------------------------------------------
 # 3. auth.users.confirmed_at
 # --------------------------------------------------------------------------
-def remove_generated_confirmed_at(line: str) -> str:
-    prefix = "INSERT INTO auth.users ("
+def remove_insert_columns(line: str, table: str, columns_to_remove: set[str]) -> str:
+    """Remove colunas incompatíveis de um INSERT preservando a ordem dos valores."""
+    prefix = f"INSERT INTO {table} ("
     if not line.startswith(prefix) or ") VALUES (" not in line:
         return line
 
     columns_end = line.index(") VALUES (")
     columns = [column.strip() for column in line[len(prefix):columns_end].split(",")]
-    if "confirmed_at" not in columns:
+    remove_indexes = [
+        index for index, column in enumerate(columns) if column in columns_to_remove
+    ]
+    if not remove_indexes:
         return line
 
     values_start = columns_end + len(") VALUES (")
@@ -134,12 +138,12 @@ def remove_generated_confirmed_at(line: str) -> str:
     values = split_sql_values(line[values_start:values_end])
     if len(values) != len(columns):
         raise ValueError(
-            f"auth.users possui {len(columns)} colunas e {len(values)} valores"
+            f"{table} possui {len(columns)} colunas e {len(values)} valores"
         )
 
-    generated_index = columns.index("confirmed_at")
-    del columns[generated_index]
-    del values[generated_index]
+    for generated_index in reversed(remove_indexes):
+        del columns[generated_index]
+        del values[generated_index]
     return (
         prefix
         + ", ".join(columns)
@@ -174,10 +178,14 @@ def load_array_columns(schema_path: Path) -> dict[str, set[str]]:
 
 
 def json_to_pg_array(literal: str) -> str | None:
-    """Converte o literal SQL '["a","b"]' em '{"a","b"}'. None se não aplicável."""
-    if len(literal) < 2 or literal[0] != "'" or literal[-1] != "'":
+    """Converte strings JSON normais/E-string em ARRAY[...]::text[]."""
+    is_escape_string = literal.startswith("E'")
+    quote_start = 1 if is_escape_string else 0
+    if len(literal) < 2 or literal[quote_start] != "'" or literal[-1] != "'":
         return None
-    inner = literal[1:-1].replace("''", "'")
+    inner = literal[quote_start + 1:-1].replace("''", "'")
+    if is_escape_string:
+        inner = inner.replace("\\\\", "\\")
     stripped = inner.strip()
     if not stripped.startswith("[") or not stripped.endswith("]"):
         return None
@@ -195,10 +203,8 @@ def json_to_pg_array(literal: str) -> str | None:
         if isinstance(item, (dict, list)):
             return None  # array multidimensional/objeto: não converte
         as_text = item if isinstance(item, str) else json.dumps(item)
-        as_text = as_text.replace("\\", "\\\\").replace('"', '\\"')
-        elements.append(f'"{as_text}"')
-    pg_literal = "{" + ",".join(elements) + "}"
-    return "'" + pg_literal.replace("'", "''") + "'"
+        elements.append("'" + as_text.replace("'", "''") + "'")
+    return "ARRAY[" + ",".join(elements) + "]::text[]"
 
 
 def fix_array_values(text: str, array_columns: dict[str, set[str]]) -> str:
@@ -267,7 +273,11 @@ def normalize(source: Path, destination: Path) -> None:
         schema_path = SQL_DIR / SCHEMA_FILE
     text = fix_array_values(text, load_array_columns(schema_path))
 
-    lines = [remove_generated_confirmed_at(line) for line in text.splitlines()]
+    lines: list[str] = []
+    for line in text.splitlines():
+        line = remove_insert_columns(line, "auth.users", {"confirmed_at"})
+        line = remove_insert_columns(line, "auth.identities", {"email"})
+        lines.append(line)
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
