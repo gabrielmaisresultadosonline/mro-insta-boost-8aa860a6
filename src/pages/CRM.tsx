@@ -2890,12 +2890,19 @@ const CRM = () => {
         const contactsToProcess = [...new Set(extractedNumbers)];
         const createdIds: string[] = [];
         
+        const { data: { user: bulkUser } } = await supabase.auth.getUser();
         for (const num of contactsToProcess) {
-          let { data: contact } = await supabase.from('crm_contacts').select('id').eq('wa_id', num).maybeSingle();
+          let { data: contact } = await supabase
+            .from('crm_contacts')
+            .select('id')
+            .eq('wa_id', num)
+            .eq('user_id', bulkUser?.id ?? '')
+            .maybeSingle();
           if (!contact) {
             const { data: newContact, error: createError } = await supabase.from('crm_contacts').insert({
               wa_id: num,
               name: num,
+              user_id: bulkUser?.id,
               status: 'new',
               source_type: 'bulk_import'
             }).select().single();
