@@ -91,14 +91,30 @@ set_env() { # set_env VAR VALOR  (só grava se estiver vazio/ausente)
   fi
 }
 
+replace_env() { # replace_env VAR VALOR (corrige configuração inválida existente)
+  local var="$1" val="$2"
+  if grep -qE "^${var}=" "$STACK/.env"; then
+    sed -i "s|^${var}=.*|${var}=${val}|" "$STACK/.env"
+  else
+    echo "${var}=${val}" >> "$STACK/.env"
+  fi
+}
+
 # segredos próprios da stack: gerados aqui, não vêm de lugar nenhum
 gen() { openssl rand -hex 32; }
 set_env POSTGRES_PASSWORD "$(gen)"
 set_env JWT_SECRET "$(gen)"
-set_env REALTIME_ENC_KEY "$(openssl rand -hex 16)"
+# O Realtime/Cloak recebe DB_ENC_KEY como texto literal e exige exatamente
+# 16 bytes. `-hex 8` gera 16 caracteres; `-hex 16` gerava 32 e causava loop.
+set_env REALTIME_ENC_KEY "$(openssl rand -hex 8)"
 set_env REALTIME_SECRET_KEY_BASE "$(openssl rand -hex 32)"
 
 set -a; . "$STACK/.env"; set +a
+if [ "${#REALTIME_ENC_KEY}" -ne 16 ]; then
+  warn "REALTIME_ENC_KEY inválida (${#REALTIME_ENC_KEY} caracteres); regenerando com 16"
+  replace_env REALTIME_ENC_KEY "$(openssl rand -hex 8)"
+  set -a; . "$STACK/.env"; set +a
+fi
 
 # ANON_KEY / SERVICE_ROLE_KEY são JWTs assinados com o JWT_SECRET local
 jwt() { # jwt <role>

@@ -34,6 +34,17 @@ NORMALIZER="$ROOT/deploy/normalizar-dump.py"
 
 [ -f "$STACK/.env" ] || die "não achei $STACK/.env — rode ./deploy/atualizar.sh primeiro"
 set -a; . "$STACK/.env"; set +a
+if [ "${#REALTIME_ENC_KEY}" -ne 16 ]; then
+  warn "REALTIME_ENC_KEY inválida (${#REALTIME_ENC_KEY} caracteres); regenerando com 16"
+  nova_realtime_key="$(openssl rand -hex 8)"
+  if grep -qE '^REALTIME_ENC_KEY=' "$STACK/.env"; then
+    sed -i "s|^REALTIME_ENC_KEY=.*|REALTIME_ENC_KEY=${nova_realtime_key}|" "$STACK/.env"
+  else
+    echo "REALTIME_ENC_KEY=${nova_realtime_key}" >> "$STACK/.env"
+  fi
+  export REALTIME_ENC_KEY="$nova_realtime_key"
+  ok "chave do Realtime corrigida; o container será recriado"
+fi
 DB="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${PG_PORT:-5432}/${POSTGRES_DB:-postgres}"
 
 docker exec zapmro-db pg_isready -U postgres >/dev/null 2>&1 \
