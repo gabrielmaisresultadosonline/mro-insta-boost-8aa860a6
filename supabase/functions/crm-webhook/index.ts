@@ -199,6 +199,7 @@ serve(async (req) => {
       .from('crm_contacts')
       .select('id, status')
       .eq('wa_id', cleanTo)
+      .eq('user_id', ownerId)
       .maybeSingle();
 
     if (!contact) {
@@ -207,6 +208,7 @@ serve(async (req) => {
         .insert([{
           wa_id: cleanTo,
           name: cleanTo,
+          user_id: ownerId,
           status: webhook.default_status || 'new',
           source_type: `webhook_${webhook.name}`
         }])
