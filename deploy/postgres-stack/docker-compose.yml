@@ -163,6 +163,12 @@ services:
     depends_on:
       db: { condition: service_healthy }
     command: ["start", "--main-service", "/home/deno/main"]
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/127.0.0.1/9000' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     environment:
       SUPABASE_URL: ${INTERNAL_API_URL:-http://gateway:8000}
       SUPABASE_ANON_KEY: ${ANON_KEY}
@@ -185,7 +191,7 @@ services:
       rest: { condition: service_started }
       realtime: { condition: service_started }
       storage: { condition: service_healthy }
-      functions: { condition: service_started }
+      functions: { condition: service_healthy }
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:

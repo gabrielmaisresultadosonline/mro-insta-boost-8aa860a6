@@ -246,6 +246,10 @@ EOF
         echo -e "${C_G}OK${N} (HTTP $code)"
       else
         echo -e "${C_R}FALHOU${N} (HTTP $code)"
+        if [ "$1" = "functions" ]; then
+          warn "últimas mensagens das Functions:"
+          docker logs --tail 25 zapmro-functions 2>&1 | sed 's/^/      /' || true
+        fi
       fi
     }
     chk "gateway"  "$G/health"
