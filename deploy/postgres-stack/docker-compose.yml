@@ -156,7 +156,7 @@ services:
     container_name: zapmro-functions
     depends_on:
       db: { condition: service_healthy }
-    command: ["start", "--main-service", "/home/deno/functions/main"]
+    command: ["start", "--main-service", "/home/deno/main"]
     environment:
       SUPABASE_URL: ${INTERNAL_API_URL:-http://gateway:8000}
       SUPABASE_ANON_KEY: ${ANON_KEY}
@@ -167,7 +167,7 @@ services:
       - ./secrets.env
     volumes:
       - ../../supabase/functions:/home/deno/functions:ro
-      - ./functions-main:/home/deno/functions/main:ro
+      - ./functions-main:/home/deno/main:ro
 
   # ---------------------------------------------------------------- GATEWAY --
   gateway:
