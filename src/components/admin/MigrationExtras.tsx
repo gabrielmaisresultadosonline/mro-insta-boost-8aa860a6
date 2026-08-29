@@ -3,7 +3,8 @@ import JSZip from "jszip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Download, Loader2, FileCode2, HardDrive, BookOpen, KeyRound } from "lucide-react";
+import { Download, Loader2, FileCode2, HardDrive, BookOpen, KeyRound, ShieldAlert } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * MigrationExtras — exportações complementares ao dump SQL:
