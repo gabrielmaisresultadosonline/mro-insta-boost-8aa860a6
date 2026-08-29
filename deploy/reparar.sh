@@ -67,6 +67,8 @@ GRANT anon, authenticated, service_role TO authenticator;
 CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS auth       AUTHORIZATION supabase_auth_admin;
 CREATE SCHEMA IF NOT EXISTS storage    AUTHORIZATION supabase_storage_admin;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 ALTER SCHEMA auth    OWNER TO supabase_auth_admin;
 ALTER SCHEMA storage OWNER TO supabase_storage_admin;
 GRANT USAGE ON SCHEMA public, extensions, auth, storage TO anon, authenticated, service_role;
@@ -135,6 +137,18 @@ else
     python3 "$NORMALIZER" "$f" "$normalized"
     sed -E '/^[[:space:]]*(BEGIN|COMMIT|END)[[:space:]]*;[[:space:]]*$/d' "$normalized" > "$tmp"
     psql "$DB" -v ON_ERROR_STOP=0 -q -f "$tmp" > "/tmp/zapmro-rep-$nome.log" 2>&1 || true
+    # Objetos que acabaram de ser criados devem voltar imediatamente ao dono
+    # esperado pelos serviços, inclusive se outro arquivo falhar depois.
+    psql "$DB" -v ON_ERROR_STOP=0 -q >/dev/null 2>&1 <<'SQL' || true
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT schemaname, tablename FROM pg_tables WHERE schemaname IN ('auth','storage') LOOP
+    EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', r.schemaname, r.tablename,
+      CASE r.schemaname WHEN 'auth' THEN 'supabase_auth_admin' ELSE 'supabase_storage_admin' END);
+  END LOOP;
+END $$;
+SQL
     graves=$(grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-rep-$nome.log" \
              | grep -viE 'already exists|does not exist, skipping|duplicate key|multiple primary keys|role "sandbox_exec" does not exist' | wc -l || true)
     if [ "${graves:-0}" -gt 0 ]; then
