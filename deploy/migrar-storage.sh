@@ -51,15 +51,26 @@ ok "papéis anon/authenticated/service_role liberados para o Storage"
 
 sec "Esperando a stack local responder"
 storage_ready=0
+ultimo_codigo="000"
 for i in $(seq 1 60); do
-  if curl -sf -o /dev/null "$LOCAL_URL/storage/v1/bucket" -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY"; then
+  # o Storage responde 200 (lista) ou 4xx (payload/rota) — qualquer um prova que
+  # está no ar. Só 000 (fora do ar) ou 5xx contam como "não respondeu".
+  ultimo_codigo="$(curl -s -o /tmp/zapmro-storage-check.json -m 10 -w '%{http_code}' \
+    "$LOCAL_URL/storage/v1/bucket" \
+    -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY" 2>/dev/null || echo 000)"
+  if [ "$ultimo_codigo" != "000" ] && [ "${ultimo_codigo:0:1}" != "5" ]; then
     storage_ready=1
     break
   fi
   sleep 2
 done
-[ "$storage_ready" = 1 ] || die "Storage não respondeu com a service key após 120 segundos"
-ok "storage local respondendo"
+if [ "$storage_ready" != 1 ]; then
+  err "Storage não respondeu (último HTTP: $ultimo_codigo). Últimas linhas do log:"
+  ( cd "$STACK" && docker compose logs --tail 40 storage ) || true
+  die "corrija o serviço de Storage e rode ./deploy/migrar-storage.sh de novo"
+fi
+ok "storage local respondendo (HTTP $ultimo_codigo)"
+
 
 sec "Copiando arquivos (nuvem → VPS)"
 node "$ROOT/deploy/postgres-stack/scripts/copiar-storage.mjs"
