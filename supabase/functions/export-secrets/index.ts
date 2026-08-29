@@ -1,16 +1,8 @@
 /**
- * export-secrets — exportador ÚNICO e protegido dos valores dos secrets.
- *
- * Regras de segurança aplicadas:
- *  - exige a senha de admin (mesma fonte usada por verify-admin-password);
- *  - responde apenas via POST com JSON;
- *  - nunca loga valores; apenas nomes e contagem;
- *  - a resposta é no-store (não fica em cache de proxy/browser).
- *
- * Após colar o conteúdo no VPS, remova esta função do projeto.
+ * Gera somente o modelo seguro dos secrets necessários na VPS.
+ * Valores guardados pelo backend são criptografados e não podem ser
+ * recuperados por uma Edge Function, inclusive no ambiente publicado.
  */
-
-const ADMIN_PASSWORD = "Ga145523@";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,22 +10,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-/** Secrets que fazem sentido migrar para a stack própria. */
-const EXPORTABLE: readonly string[] = [
-  "BRIGHTDATA_API_TOKEN",
-  "BRIGHTDATA_WEB_UNLOCKER_ZONE",
-  "DEEPSEEK_API_KEY",
-  "FACEBOOK_APP_ID",
-  "FACEBOOK_APP_SECRET",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "INSTAGRAM_SESSION_ID",
-  "LOVABLE_API_KEY",
-  "META_CONVERSIONS_API_TOKEN",
-  "RAPIDAPI_KEY",
-  "SMTP_PASSWORD",
-  "WPP_BOT_TOKEN",
-  "ZAPMRO_SMTP_PASSWORD",
+const REQUIRED: readonly { name: string; source: string }[] = [
+  { name: "BRIGHTDATA_API_TOKEN", source: "painel Bright Data" },
+  { name: "BRIGHTDATA_WEB_UNLOCKER_ZONE", source: "zona Web Unlocker da Bright Data" },
+  { name: "DEEPSEEK_API_KEY", source: "painel DeepSeek" },
+  { name: "FACEBOOK_APP_ID", source: "app da Meta" },
+  { name: "FACEBOOK_APP_SECRET", source: "app da Meta" },
+  { name: "GOOGLE_CLIENT_ID", source: "credencial OAuth do Google" },
+  { name: "GOOGLE_CLIENT_SECRET", source: "credencial OAuth do Google" },
+  { name: "INSTAGRAM_SESSION_ID", source: "sessão da integração Instagram" },
+  { name: "LOVABLE_API_KEY", source: "substituir por um provedor de IA disponível fora do Lovable Cloud" },
+  { name: "META_CONVERSIONS_API_TOKEN", source: "Gerenciador de Eventos da Meta" },
+  { name: "RAPIDAPI_KEY", source: "painel RapidAPI" },
+  { name: "SMTP_PASSWORD", source: "provedor SMTP correspondente" },
+  { name: "WPP_BOT_TOKEN", source: "provedor do bot WhatsApp" },
+  { name: "ZAPMRO_SMTP_PASSWORD", source: "provedor de e-mail do ZapMRO" },
 ];
 
 /**
@@ -61,61 +52,26 @@ function json(payload: unknown, status = 200) {
   });
 }
 
-/** Escapa valor para formato dotenv (aspas simples preservam tudo, menos aspas simples). */
-function toEnvLine(name: string, value: string): string {
-  const safe = value.replace(/'/g, `'"'"'`);
-  return `${name}='${safe}'`;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const raw = await req.text();
-    let password = "";
-    try {
-      password = String(JSON.parse(raw || "{}")?.password ?? "").trim();
-    } catch {
-      password = "";
-    }
+    if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
-    if (!password || password.length > 100) {
-      return json({ error: "Senha obrigatória" }, 401);
-    }
-
-    // Mesma credencial usada pelo painel /admincentral (crm-central-admin).
-    if (password !== ADMIN_PASSWORD) {
-      console.warn("[export-secrets] tentativa com senha inválida");
-      return json({ error: "Senha incorreta" }, 401);
-    }
-
-    const found: string[] = [];
-    const missing: string[] = [];
-    const lines: string[] = [];
-
-    for (const name of EXPORTABLE) {
-      const value = Deno.env.get(name);
-      // Ambientes de preview injetam um placeholder no lugar do valor real.
-      const isPlaceholder = !value || value.includes("PLACEHOLDER_VALUE");
-
-      if (!isPlaceholder) {
-        found.push(name);
-        lines.push(toEnvLine(name, value!));
-      } else {
-        missing.push(name);
-        lines.push(`# ${name}= (preencher manualmente — não disponível aqui)`);
-      }
-    }
+    const lines = REQUIRED.flatMap(({ name, source }) => [
+      `# Obter em: ${source}`,
+      `${name}=`,
+    ]);
 
     const header = [
       "# ============================================================",
-      "# secrets.env — gerado automaticamente pelo exportador do painel",
+      "# secrets.env — modelo seguro para a VPS",
       `# Data: ${new Date().toISOString()}`,
       "#",
-      "# ATENÇÃO: este arquivo contém credenciais em texto puro.",
-      "# Guarde com chmod 600 e NUNCA versione no git.",
+      "# Preencha diretamente na VPS; não envie os valores por chat.",
+      "# Depois use chmod 600 e NUNCA versione este arquivo no git.",
       "#",
       "# Uso: deploy/postgres-stack/secrets.env",
       "# ============================================================",
@@ -133,15 +89,12 @@ Deno.serve(async (req) => {
       "",
     ].join("\n");
 
-    console.log(
-      `[export-secrets] exportados=${found.length} ausentes=${missing.length}`,
-    );
-
     return json({
       success: true,
       content: header + lines.join("\n") + footer,
-      found,
-      missing,
+      found: [],
+      missing: REQUIRED.map(({ name }) => name),
+      notice: "Os valores criptografados não podem ser recuperados pelo runtime; o arquivo gerado é um modelo para preenchimento seguro na VPS.",
     });
   } catch (err) {
     console.error("[export-secrets] erro:", err);
