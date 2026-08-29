@@ -3929,27 +3929,33 @@ async function fetchAndStoreIncomingMedia(
        userId = settings.user_id;
        userSettings = settings;
      }
-    } else {
-      const authHeader = req.headers.get('Authorization');
-      if (authHeader) {
-        const token = authHeader.replace('Bearer ', '');
-        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-        if (serviceRoleKey && token === serviceRoleKey) {
-          trustedInternalRequest = true;
-          console.log('[AUTH-DEBUG] Trusted internal request detected');
-          userId = null; // Will be resolved from params if needed
-        } else {
-          const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-          if (user) {
-            userId = user.id;
-          } else if (authError) {
-            console.warn('[AUTH-DEBUG] getUser failed with token:', token.slice(0, 10) + '...', authError);
-          }
-        }
-      } else {
-        console.log('[AUTH-DEBUG] No Authorization header present');
-      }
-    }
+     } else {
+       const authHeader = req.headers.get('Authorization');
+       if (authHeader) {
+         const token = authHeader.replace('Bearer ', '');
+         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+         if (serviceRoleKey && token === serviceRoleKey) {
+           trustedInternalRequest = true;
+           console.log('[AUTH-DEBUG] Trusted internal request detected');
+           userId = null; // Will be resolved from params if needed
+         } else {
+           // Em self-hosted (VPS) o GoTrue pode ficar momentaneamente indisponível.
+           // Nesse caso a exceção não pode derrubar a função inteira com HTTP 500.
+           try {
+             const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+             if (user) {
+               userId = user.id;
+             } else if (authError) {
+               console.warn('[AUTH-DEBUG] getUser failed with token:', token.slice(0, 10) + '...', authError.message);
+             }
+           } catch (authEx: any) {
+             console.error('[AUTH-DEBUG] getUser threw:', authEx?.message || authEx);
+           }
+         }
+       } else {
+         console.log('[AUTH-DEBUG] No Authorization header present');
+       }
+     }
  
     try {
       const rawBody = await req.text();
