@@ -147,6 +147,39 @@ const getCanonicalConversationPhone = (rawPhone: unknown): string => {
   return normalized;
 };
 
+const getConversationActivityTime = (contact: any): number => {
+  // `updated_at` also changes when a name, tag or Google sync changes. Using it
+  // here placed contacts without a recent conversation above active chats.
+  const candidates = [contact?.last_interaction, contact?.last_message_received_at];
+  for (const value of candidates) {
+    if (!value) continue;
+    const parsed = new Date(value).getTime();
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+};
+
+const getLatestIsoValue = (first: unknown, second: unknown): string | null => {
+  const values = [first, second]
+    .filter(Boolean)
+    .map(value => ({ value: String(value), time: new Date(String(value)).getTime() }))
+    .filter(item => Number.isFinite(item.time))
+    .sort((a, b) => b.time - a.time);
+  return values[0]?.value ?? null;
+};
+
+const compareConversationContacts = (a: any, b: any): number => {
+  const now = Date.now();
+  const windowDuration = 24 * 60 * 60 * 1000;
+  const aInbound = a?.last_message_received_at ? new Date(a.last_message_received_at).getTime() : 0;
+  const bInbound = b?.last_message_received_at ? new Date(b.last_message_received_at).getTime() : 0;
+  const aWindowOpen = aInbound > 0 && now - aInbound < windowDuration;
+  const bWindowOpen = bInbound > 0 && now - bInbound < windowDuration;
+
+  if (aWindowOpen !== bWindowOpen) return aWindowOpen ? -1 : 1;
+  return getConversationActivityTime(b) - getConversationActivityTime(a);
+};
+
 const deduplicateConversationContacts = (rows: any[]): any[] => {
   const byConversation = new Map<string, any>();
 
@@ -160,24 +193,22 @@ const deduplicateConversationContacts = (rows: any[]): any[] => {
       continue;
     }
 
-    const existingTime = new Date(existing.last_interaction || existing.updated_at || 0).getTime();
-    const contactTime = new Date(contact.last_interaction || contact.updated_at || 0).getTime();
+    const existingTime = getConversationActivityTime(existing);
+    const contactTime = getConversationActivityTime(contact);
     const newest = contactTime >= existingTime ? contact : existing;
     const oldest = newest === contact ? existing : contact;
 
     byConversation.set(key, {
       ...oldest,
       ...newest,
+      last_interaction: getLatestIsoValue(oldest.last_interaction, newest.last_interaction),
+      last_message_received_at: getLatestIsoValue(oldest.last_message_received_at, newest.last_message_received_at),
       total_messages_received: Math.max(oldest.total_messages_received ?? 0, newest.total_messages_received ?? 0),
       total_messages_sent: Math.max(oldest.total_messages_sent ?? 0, newest.total_messages_sent ?? 0),
     });
   }
 
-  return Array.from(byConversation.values()).sort((a, b) => {
-    const aTime = new Date(a.last_interaction || a.updated_at || 0).getTime();
-    const bTime = new Date(b.last_interaction || b.updated_at || 0).getTime();
-    return bTime - aTime;
-  });
+  return Array.from(byConversation.values()).sort(compareConversationContacts);
 };
 
 const encodeAudioBufferToWav = (audioBuffer: AudioBuffer) => {
@@ -530,6 +561,7 @@ const CRM = () => {
   const CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutos
   const [flows, setFlows] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
+  const currentUserIdRef = useRef<string | null>(null);
   // Per-contact inbound message timestamps (last 7 days) used to compute
   // unread counts shown as a yellow badge on the conversation list.
   const [inboundTimestampsByContact, setInboundTimestampsByContact] = useState<Record<string, string[]>>({});
@@ -540,9 +572,7 @@ const CRM = () => {
   // Freeze conversation order toggle — when on, the conversation list keeps
   // its current ordering (new contacts go on top, but existing ones don't
   // jump when new messages arrive). Persisted in localStorage.
-  const [freezeConversationOrder, setFreezeConversationOrder] = useState<boolean>(() => {
-    try { return localStorage.getItem('crm_freeze_order') === '1'; } catch { return false; }
-  });
+  const [freezeConversationOrder, setFreezeConversationOrder] = useState<boolean>(false);
   const frozenOrderRef = useRef<string[]>([]);
   // Pre-computed once whenever `contacts` changes — used by the Conversas
   // tab. Avoids re-scanning 14k+ rows on every tab switch / status change.
@@ -1228,6 +1258,7 @@ const CRM = () => {
       const { data } = await supabase
         .from('crm_messages')
         .select('*')
+        .eq('user_id', currentUserIdRef.current ?? '')
         .gt('created_at', firstCursor)
         .order('created_at', { ascending: true })
         .limit(100); // Limite de segurança para evitar sobrecarga no realtime fallback
@@ -1267,17 +1298,14 @@ const CRM = () => {
         const { data: changedContacts } = await supabase
           .from('crm_contacts')
           .select('*')
+          .eq('user_id', currentUserIdRef.current ?? '')
           .in('id', contactIds);
 
         if (changedContacts?.length) {
           setContacts(prev => {
             const map = new Map(prev.map((contact: any) => [contact.id, contact]));
             changedContacts.forEach((contact: any) => map.set(contact.id, { ...map.get(contact.id), ...contact }));
-            return Array.from(map.values()).sort((a: any, b: any) => {
-              const aT = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-              const bT = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
-              return bT - aT;
-            });
+            return deduplicateConversationContacts(Array.from(map.values()));
           });
 
           const selectedUpdate = changedContacts.find((contact: any) => contact.id === activeContactId);
@@ -1500,6 +1528,17 @@ const CRM = () => {
          navigate('/crm/login');
          return;
        }
+        const nextUserId = session.user.id;
+        if (currentUserIdRef.current !== nextUserId) {
+          setContacts([]);
+          setSelectedContact(null);
+          setChatMessages([]);
+          messagesCacheRef.current = {};
+          contactsCacheKeyRef.current = `crm_contacts_cache_v3_${nextUserId}`;
+          contactsSeededRef.current = false;
+          lastContactsSyncRef.current = null;
+        }
+        currentUserIdRef.current = nextUserId;
         if (localStorage.getItem(`crm_whatsapp_connected_${session.user.id}`) === 'true') {
           setWhatsAppConnectionConfirmed(true);
         }
@@ -1526,6 +1565,7 @@ const CRM = () => {
 
         if (payload.eventType === 'INSERT') {
           const newMessage: any = payload.new;
+          if (!currentUserIdRef.current || newMessage.user_id !== currentUserIdRef.current) return;
           if (selectedContactRef.current && newMessage.contact_id === selectedContactRef.current.id) {
             setChatMessages(prev => {
               if (prev.find(m => m.id === newMessage.id)) return prev;
@@ -1539,11 +1579,7 @@ const CRM = () => {
             setContacts(prev => prev.map(c => c.id === newMessage.contact_id
               ? { ...c, last_message_received_at: newMessage.created_at, last_interaction: newMessage.created_at }
               : c
-            ).sort((a, b) => {
-              const aT = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-              const bT = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
-              return bT - aT;
-            }));
+            ).sort(compareConversationContacts));
 
             setSelectedContact((prev: any) => prev && prev.id === newMessage.contact_id
               ? { ...prev, last_message_received_at: newMessage.created_at, last_interaction: newMessage.created_at }
@@ -1567,14 +1603,11 @@ const CRM = () => {
             setContacts(prev => prev.map(c => c.id === newMessage.contact_id
               ? { ...c, last_interaction: newMessage.created_at }
               : c
-            ).sort((a, b) => {
-              const aT = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-              const bT = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
-              return bT - aT;
-            }));
+            ).sort(compareConversationContacts));
           }
         } else if (payload.eventType === 'UPDATE') {
           const updatedMessage = payload.new;
+          if (!currentUserIdRef.current || updatedMessage.user_id !== currentUserIdRef.current) return;
           if (selectedContactRef.current && updatedMessage.contact_id === selectedContactRef.current.id) {
             setChatMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m));
             if (updatedMessage.direction === 'outbound' && updatedMessage.status === 'failed') {
@@ -1590,6 +1623,8 @@ const CRM = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'crm_contacts' }, (payload) => {
         const newRow: any = (payload as any).new;
         const oldRow: any = (payload as any).old;
+        const eventOwnerId = newRow?.user_id ?? oldRow?.user_id;
+        if (!currentUserIdRef.current || eventOwnerId !== currentUserIdRef.current) return;
         if (payload.eventType === 'DELETE' && oldRow?.id) {
           setContacts(prev => prev.filter(c => c.id !== oldRow.id));
         } else if (newRow?.id) {
@@ -1603,11 +1638,7 @@ const CRM = () => {
               next[idx] = { ...next[idx], ...newRow };
             }
             // Re-sort para garantir que o contato atualizado suba na lista
-            return next.sort((a, b) => {
-              const aT = a.last_interaction ? new Date(a.last_interaction).getTime() : 0;
-              const bT = b.last_interaction ? new Date(b.last_interaction).getTime() : 0;
-              return bT - aT;
-            });
+            return deduplicateConversationContacts(next);
           });
         }
         if (selectedContactRef.current && payload.new && (payload.new as any).id === selectedContactRef.current.id) {
@@ -1763,13 +1794,19 @@ const CRM = () => {
     if (contactsInFlightRef.current) return;
     contactsInFlightRef.current = true;
     try {
-      // Resolve cache key once per user
-      if (!contactsCacheKeyRef.current) {
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) contactsCacheKeyRef.current = `crm_contacts_cache_v2_${user.id}`;
-        } catch {}
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const userId = user.id;
+      if (currentUserIdRef.current !== userId) {
+        setContacts([]);
+        setSelectedContact(null);
+        messagesCacheRef.current = {};
+        contactsSeededRef.current = false;
+        lastContactsSyncRef.current = null;
       }
+      currentUserIdRef.current = userId;
+      // Resolve cache key once per user
+      contactsCacheKeyRef.current = `crm_contacts_cache_v3_${userId}`;
       const cacheKey = contactsCacheKeyRef.current;
       const now = Date.now();
 
@@ -1780,8 +1817,9 @@ const CRM = () => {
           if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed?.rows)) {
-              console.log(`[CRM] Restaurando ${parsed.rows.length} contatos do cache...`);
-              setContacts(deduplicateConversationContacts(parsed.rows));
+              const ownedRows = parsed.rows.filter((contact: any) => contact?.user_id === userId);
+              console.log(`[CRM] Restaurando ${ownedRows.length} contatos do cache da conta atual...`);
+              setContacts(deduplicateConversationContacts(ownedRows));
               // O cache guarda só as conversas mais recentes (limite do navegador),
               // então NÃO marcamos a sincronização como completa: o fetch abaixo
               // continua trazendo a base inteira.
@@ -1808,6 +1846,7 @@ const CRM = () => {
         let q = supabase
           .from('crm_contacts')
           .select('*')
+          .eq('user_id', userId)
           .order('updated_at', { ascending: false })
           .range(from, from + pageSize - 1);
 
@@ -1831,10 +1870,16 @@ const CRM = () => {
       if (newRows.length > 0 || !lastContactsSyncRef.current) {
         setContacts(prev => {
           const map = new Map<string, any>();
-          // Preservar contatos existentes
-          for (const c of prev) map.set(c.id, c);
+          // Em uma carga completa, o banco é a fonte da verdade. Em cargas
+          // incrementais, preservamos somente registros pertencentes à conta atual.
+          if (lastContactsSyncRef.current) {
+            for (const c of prev) {
+              if (c?.user_id === userId) map.set(c.id, c);
+            }
+          }
           // Atualizar com novos dados (upsert local)
           for (const c of newRows) {
+            if (c?.user_id !== userId) continue;
             const existing = map.get(c.id);
             map.set(c.id, existing ? { ...existing, ...c } : c);
           }
@@ -1855,6 +1900,7 @@ const CRM = () => {
               status: c.status,
               tags: c.tags,
               last_interaction: c.last_interaction,
+              last_message_received_at: c.last_message_received_at,
               last_read_at: c.last_read_at,
               updated_at: c.updated_at,
               created_at: c.created_at,
@@ -1897,6 +1943,7 @@ const CRM = () => {
       const { data } = await supabase
         .from('crm_messages')
         .select('contact_id, created_at')
+        .eq('user_id', currentUserIdRef.current ?? '')
         .eq('direction', 'inbound')
         .gte('created_at', since)
         .order('created_at', { ascending: false });
@@ -2010,11 +2057,7 @@ const CRM = () => {
           );
         })();
 
-    if (!freezeConversationOrder) {
-      // Default behavior: most recent on top (already sorted upstream).
-      frozenOrderRef.current = filtered.map(c => c.id);
-      return filtered;
-    }
+    if (!freezeConversationOrder) return [...filtered].sort(compareConversationContacts);
 
     // Frozen order: preserve previously seen order, prepend new contacts on top.
     const byId = new Map(filtered.map(c => [c.id, c]));
@@ -2033,6 +2076,7 @@ const CRM = () => {
        const { data: { session } } = await supabase.auth.getSession();
        const user = session?.user;
        if (!user) return;
+       currentUserIdRef.current = user.id;
 
  
         let settingsData = null;
@@ -2588,6 +2632,7 @@ const CRM = () => {
         .from('crm_messages')
         .select('*')
         .eq('contact_id', contactId)
+        .eq('user_id', currentUserIdRef.current ?? '')
         .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: true });
 
@@ -2638,7 +2683,11 @@ const CRM = () => {
       .filter((m: any) => !m.isOptimistic && m.created_at)
       .reduce((latest: number, m: any) => Math.max(latest, new Date(m.created_at).getTime()), 0);
 
-    let query = supabase.from('crm_messages').select('*').eq('contact_id', contactId);
+    let query = supabase
+      .from('crm_messages')
+      .select('*')
+      .eq('contact_id', contactId)
+      .eq('user_id', currentUserIdRef.current ?? '');
     if (latestPersistedTime > 0) {
       query = query.gt('created_at', new Date(latestPersistedTime).toISOString()).order('created_at', { ascending: true }).limit(25);
     } else {
@@ -8859,7 +8908,6 @@ const CRM = () => {
                               checked={freezeConversationOrder}
                               onCheckedChange={(val) => {
                                 setFreezeConversationOrder(val);
-                                try { localStorage.setItem('crm_freeze_order', val ? '1' : '0'); } catch {}
                               }}
                             />
                           </div>
