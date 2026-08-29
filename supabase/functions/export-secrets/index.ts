@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-
 /**
  * export-secrets — exportador ÚNICO e protegido dos valores dos secrets.
  *
@@ -11,6 +9,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
  *
  * Após colar o conteúdo no VPS, remova esta função do projeto.
  */
+
+const ADMIN_PASSWORD = "Ga145523@";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,22 +85,8 @@ Deno.serve(async (req) => {
       return json({ error: "Senha obrigatória" }, 401);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
-
-    const { data, error } = await supabase
-      .from("license_settings")
-      .select("admin_password")
-      .limit(1)
-      .single();
-
-    if (error || !data) {
-      return json({ error: "Configuração de admin não encontrada" }, 500);
-    }
-
-    if (password !== String(data.admin_password).trim()) {
+    // Mesma credencial usada pelo painel /admincentral (crm-central-admin).
+    if (password !== ADMIN_PASSWORD) {
       console.warn("[export-secrets] tentativa com senha inválida");
       return json({ error: "Senha incorreta" }, 401);
     }
@@ -111,12 +97,15 @@ Deno.serve(async (req) => {
 
     for (const name of EXPORTABLE) {
       const value = Deno.env.get(name);
-      if (value && value.length > 0) {
+      // Ambientes de preview injetam um placeholder no lugar do valor real.
+      const isPlaceholder = !value || value.includes("PLACEHOLDER_VALUE");
+
+      if (!isPlaceholder) {
         found.push(name);
-        lines.push(toEnvLine(name, value));
+        lines.push(toEnvLine(name, value!));
       } else {
         missing.push(name);
-        lines.push(`# ${name}= (não configurado neste ambiente)`);
+        lines.push(`# ${name}= (preencher manualmente — não disponível aqui)`);
       }
     }
 
