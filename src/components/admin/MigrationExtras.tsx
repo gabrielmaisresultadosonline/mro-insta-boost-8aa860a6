@@ -404,7 +404,7 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est√
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {items.map((item) => (
           <Card key={item.id} className="p-4 bg-white border-[#E8F5F1] flex flex-col gap-3">
             <div className="flex items-center gap-2">
