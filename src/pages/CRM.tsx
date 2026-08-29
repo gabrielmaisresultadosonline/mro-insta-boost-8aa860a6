@@ -1507,6 +1507,17 @@ const CRM = () => {
          navigate('/crm/login');
          return;
        }
+        const nextUserId = session.user.id;
+        if (currentUserIdRef.current !== nextUserId) {
+          setContacts([]);
+          setSelectedContact(null);
+          setChatMessages([]);
+          messagesCacheRef.current = {};
+          contactsCacheKeyRef.current = `crm_contacts_cache_v3_${nextUserId}`;
+          contactsSeededRef.current = false;
+          lastContactsSyncRef.current = null;
+        }
+        currentUserIdRef.current = nextUserId;
         if (localStorage.getItem(`crm_whatsapp_connected_${session.user.id}`) === 'true') {
           setWhatsAppConnectionConfirmed(true);
         }
@@ -1774,7 +1785,7 @@ const CRM = () => {
       }
       currentUserIdRef.current = userId;
       // Resolve cache key once per user
-      contactsCacheKeyRef.current = `crm_contacts_cache_v2_${userId}`;
+      contactsCacheKeyRef.current = `crm_contacts_cache_v3_${userId}`;
       const cacheKey = contactsCacheKeyRef.current;
       const now = Date.now();
 
@@ -1785,8 +1796,9 @@ const CRM = () => {
           if (raw) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed?.rows)) {
-              console.log(`[CRM] Restaurando ${parsed.rows.length} contatos do cache...`);
-              setContacts(deduplicateConversationContacts(parsed.rows));
+              const ownedRows = parsed.rows.filter((contact: any) => contact?.user_id === userId);
+              console.log(`[CRM] Restaurando ${ownedRows.length} contatos do cache da conta atual...`);
+              setContacts(deduplicateConversationContacts(ownedRows));
               // O cache guarda só as conversas mais recentes (limite do navegador),
               // então NÃO marcamos a sincronização como completa: o fetch abaixo
               // continua trazendo a base inteira.
@@ -1837,10 +1849,16 @@ const CRM = () => {
       if (newRows.length > 0 || !lastContactsSyncRef.current) {
         setContacts(prev => {
           const map = new Map<string, any>();
-          // Preservar contatos existentes
-          for (const c of prev) map.set(c.id, c);
+          // Em uma carga completa, o banco é a fonte da verdade. Em cargas
+          // incrementais, preservamos somente registros pertencentes à conta atual.
+          if (lastContactsSyncRef.current) {
+            for (const c of prev) {
+              if (c?.user_id === userId) map.set(c.id, c);
+            }
+          }
           // Atualizar com novos dados (upsert local)
           for (const c of newRows) {
+            if (c?.user_id !== userId) continue;
             const existing = map.get(c.id);
             map.set(c.id, existing ? { ...existing, ...c } : c);
           }
@@ -1861,6 +1879,7 @@ const CRM = () => {
               status: c.status,
               tags: c.tags,
               last_interaction: c.last_interaction,
+              last_message_received_at: c.last_message_received_at,
               last_read_at: c.last_read_at,
               updated_at: c.updated_at,
               created_at: c.created_at,
@@ -2446,17 +2465,6 @@ const CRM = () => {
           });
           return;
         }
-        const nextUserId = session.user.id;
-        if (currentUserIdRef.current !== nextUserId) {
-          setContacts([]);
-          setSelectedContact(null);
-          setChatMessages([]);
-          messagesCacheRef.current = {};
-          contactsCacheKeyRef.current = `crm_contacts_cache_v2_${nextUserId}`;
-          contactsSeededRef.current = false;
-          lastContactsSyncRef.current = null;
-        }
-        currentUserIdRef.current = nextUserId;
         if (data?.requiresReconnect) {
           toast({
             title: "Reconecte a conta Google",

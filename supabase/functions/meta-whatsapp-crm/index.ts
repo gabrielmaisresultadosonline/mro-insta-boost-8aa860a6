@@ -1277,14 +1277,17 @@ else if (message.type === "unsupported") {
       console.error('[WEBHOOK] Failed to save inbound message', { waId, userId, error: insertMessageError.message });
       return jsonResponse({ success: false, error: insertMessageError.message }, 500);
     }
-    await supabase.from('crm_contacts').update({
-      last_interaction: new Date().toISOString(),
-      last_message_received_at: new Date().toISOString(),
+     const inboundMessageAt = message?.timestamp
+       ? new Date(Number(message.timestamp) * 1000).toISOString()
+       : new Date().toISOString();
+     await supabase.from('crm_contacts').update({
+       last_interaction: inboundMessageAt,
+       last_message_received_at: inboundMessageAt,
       total_messages_received: (contactForSave.total_messages_received || 0) + 1,
       updated_at: new Date().toISOString(),
       countdown_trigger_sent_at: null,
       last_read_at: null // Reset last_read_at when new message arrives so it shows as unread
-    }).eq('id', contactForSave.id);
+    }).eq('id', contactForSave.id).eq('user_id', userId);
     console.log('[WEBHOOK] Saved inbound message and reset last_read_at', { waId, userId, contact_id: contactForSave.id, meta_message_id: message.id });
   }
 
