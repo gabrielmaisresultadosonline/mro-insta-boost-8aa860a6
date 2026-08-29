@@ -78,3 +78,15 @@ docker exec zapmro-db pg_dump -U postgres postgres | gzip > backup-$(date +%F).s
 - O frontend segue usando o SDK `supabase-js` porque é o **protocolo** do PostgREST/GoTrue —
   reescrever para SQL direto exigiria expor o banco ao navegador, o que seria uma falha de segurança.
   A dependência do Lovable Cloud/Supabase SaaS, essa sim, deixa de existir.
+
+## Comando único de ponta a ponta (`deploy/zapmro.sh`)
+
+```bash
+chmod +x deploy/zapmro.sh deploy/migrar-para-postgres.sh
+./deploy/zapmro.sh instalar      # SO + stack + migração + build + Nginx/SSL + backup diário
+./deploy/zapmro.sh secrets       # cola as chaves das Edge Functions e reinicia
+./deploy/zapmro.sh status        # saúde + contagens (tabelas, auth, contatos, mensagens, cron)
+./deploy/zapmro.sh virar         # cutover: o frontend sai do Supabase
+./deploy/zapmro.sh voltar        # rollback instantâneo
+./deploy/zapmro.sh atualizar     # atualizações do dia a dia
+```
