@@ -332,6 +332,16 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
         console.log(`Delay node ${node.id}: Scheduled next node ${edge.target} at ${nextExecution}`);
         return { success: true, message: `Delay scheduled for ${waitTime}s` };
       }
+
+      // Um delay sem conexão de saída encerra o fluxo. Sem esta limpeza, o
+      // contato permaneceria indefinidamente como "running" sem data de retomada.
+      await supabase.from('crm_contacts').update({
+        current_flow_id: null,
+        current_node_id: null,
+        flow_state: 'idle',
+        next_execution_time: null
+      }).eq('id', contactId);
+      return { success: true, message: 'Flow completed after terminal delay' };
     } else if (node.type === 'aiAgent') {
       console.log(`[EXECUTOR] Entering AI Agent node ${node.id} for contact ${contactId}`);
       

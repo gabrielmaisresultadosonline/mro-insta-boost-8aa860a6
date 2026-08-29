@@ -263,7 +263,7 @@ ok "banco atualizado — ${aplicados} arquivo(s) aplicado(s), ${tabelas} tabelas
 
 # 5.1 — cron das Edge Functions apontando SEMPRE para esta VPS (nunca Supabase)
 info "reagendando cron das functions para a API local…"
-CRON_URL="${PUBLIC_API_URL:-http://gateway}/functions/v1/meta-whatsapp-crm"
+CRON_URL="${PUBLIC_API_URL:-http://gateway:${GATEWAY_PORT:-8000}}/functions/v1/meta-whatsapp-crm"
 psql "$DB" -q -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.functions_url = '${PUBLIC_API_URL:-http://gateway}'" >/dev/null 2>&1 || true
 psql "$DB" -q -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.service_role_key = '${SERVICE_ROLE_KEY}'" >/dev/null 2>&1 || true
 psql "$DB" -v ON_ERROR_STOP=0 -q >/tmp/zapmro-cron.log 2>&1 <<SQLCRON || true
@@ -277,7 +277,9 @@ BEGIN
   END LOOP;
 END \$\$;
 
-SELECT cron.schedule('process-scheduled-flows-every-minute', '* * * * *', \$job\$
+-- O worker roda na VPS a cada 15 segundos. Assim delays curtos continuam mesmo
+-- com todas as abas fechadas; o claim atômico em crm_contacts evita duplicidade.
+SELECT cron.schedule('process-scheduled-flows-every-minute', '15 seconds', \$job\$
   SELECT net.http_post(
     url := '${CRON_URL}',
     headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${SERVICE_ROLE_KEY}"}'::jsonb,
