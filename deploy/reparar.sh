@@ -118,7 +118,41 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 [ "${auth_users:-}" = "t" ] || warn "Auth ainda não criou auth.users; veja: docker logs zapmro-auth"
-[ "${storage_buckets:-}" = "t" ] || warn "Storage ainda não criou storage.buckets; veja: docker logs zapmro-storage"
+if [ "${storage_buckets:-}" != "t" ]; then
+  warn "Storage não criou storage.buckets; criando estrutura mínima compatível"
+  psql "$DB" <<'SQL' >/dev/null
+CREATE SCHEMA IF NOT EXISTS storage;
+CREATE TABLE IF NOT EXISTS storage.buckets (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  owner uuid,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  public boolean DEFAULT false,
+  avif_autodetection boolean DEFAULT false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
+);
+CREATE TABLE IF NOT EXISTS storage.objects (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bucket_id text REFERENCES storage.buckets(id),
+  name text,
+  owner uuid,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  last_accessed_at timestamptz DEFAULT now(),
+  metadata jsonb,
+  path_tokens text[] GENERATED ALWAYS AS (string_to_array(name, '/')) STORED,
+  version text
+);
+CREATE UNIQUE INDEX IF NOT EXISTS bucketid_objname ON storage.objects (bucket_id, name);
+ALTER TABLE storage.buckets OWNER TO supabase_storage_admin;
+ALTER TABLE storage.objects OWNER TO supabase_storage_admin;
+GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
+GRANT SELECT ON ALL TABLES IN SCHEMA storage TO anon, authenticated, service_role;
+SQL
+fi
+
 
 # ------------------------------------------------------- 3) reaplicar dumps ---
 sec "3/5 Reaplicando os dumps SQL (mostrando os erros reais)"
