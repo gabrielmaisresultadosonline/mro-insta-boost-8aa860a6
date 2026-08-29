@@ -4970,19 +4970,12 @@ async function fetchAndStoreIncomingMedia(
         .select('flow_state, current_flow_id, status, user_id, wa_id')
         .eq('id', contactId)
         .eq('user_id', userId)
-        .single();
-        
-      if (contactError) throw contactError;
+        .maybeSingle();
 
-      const { data: flow, error: flowError } = await supabase
-        .from('crm_flows')
-        .select('*')
-        .eq('id', flowId)
-        .eq('user_id', userId)
-        .single()
-      
-      if (flowError) throw flowError;
-      if (!flow) throw new Error('Flow not found')
+      if (contactError) throw new Error(`Falha ao carregar o contato: ${contactError.message}`);
+      if (!currentContact) throw new Error('Contato não encontrado nesta conta');
+
+      const flow = await loadFlowForUser(supabase, flowId, userId);
       
       await supabase.from('crm_scheduled_messages').delete().eq('contact_id', contactId);
 
