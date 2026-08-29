@@ -53,7 +53,7 @@ ok "código em $(git rev-parse --short HEAD 2>/dev/null || echo 'local')"
 # ---------------------------------------------------------- 2) dependências --
 sec "2/9 Dependências do sistema"
 faltando=()
-for b in docker node npm psql curl jq openssl; do command -v "$b" >/dev/null 2>&1 || faltando+=("$b"); done
+for b in docker node npm psql curl jq openssl nginx certbot; do command -v "$b" >/dev/null 2>&1 || faltando+=("$b"); done
 docker compose version >/dev/null 2>&1 || faltando+=("docker-compose")
 if [ ${#faltando[@]} -gt 0 ]; then
   info "instalando: ${faltando[*]}"
@@ -72,7 +72,7 @@ if [ ${#faltando[@]} -gt 0 ]; then
   fi
   command -v node >/dev/null 2>&1 || { curl -fsSL https://deb.nodesource.com/setup_20.x | sudo_ -E bash -; sudo_ apt-get install -y nodejs; }
   command -v psql >/dev/null 2>&1 || sudo_ apt-get install -y postgresql-client
-  sudo_ apt-get install -y nginx jq openssl unzip >/dev/null 2>&1 || true
+  sudo_ apt-get install -y nginx certbot python3-certbot-nginx jq openssl unzip >/dev/null 2>&1 || true
 fi
 ok "dependências prontas"
 
@@ -315,8 +315,24 @@ server {
 }
 EOF
   sudo_ ln -sf /etc/nginx/sites-available/zapmro-api.conf /etc/nginx/sites-enabled/zapmro-api.conf
-  sudo_ nginx -t >/dev/null 2>&1 && sudo_ systemctl reload nginx && ok "nginx recarregado (API em ${API_HOST}, site em ${SITE_HOST})" \
-    || warn "nginx com erro de config — rode: sudo nginx -t"
+  if sudo_ nginx -t >/dev/null 2>&1; then
+    sudo_ systemctl reload nginx
+    ok "nginx recarregado (API em ${API_HOST}, site em ${SITE_HOST})"
+
+    # O arquivo acima é recriado a cada atualização. Reaplique o certificado
+    # depois disso para que o host da API nunca caia no vhost SSL padrão de
+    # outro domínio (o navegador reportaria ERR_CERT_COMMON_NAME_INVALID).
+    if command -v certbot >/dev/null 2>&1; then
+      if sudo_ certbot --nginx -d "${API_HOST}" --non-interactive --agree-tos \
+          -m "admin@${SITE_HOST}" --redirect --keep-until-expiring >/dev/null 2>&1; then
+        ok "SSL válido aplicado em ${API_HOST}"
+      else
+        warn "SSL de ${API_HOST} pendente — confira o DNS e rode: sudo certbot --nginx -d ${API_HOST}"
+      fi
+    fi
+  else
+    warn "nginx com erro de config — rode: sudo nginx -t"
+  fi
 fi
 if command -v pm2 >/dev/null 2>&1; then
   pm2 restart all --update-env >/dev/null 2>&1 && ok "processos PM2 reiniciados" || warn "PM2 sem processos"
