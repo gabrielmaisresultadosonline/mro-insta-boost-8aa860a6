@@ -261,6 +261,51 @@ shopt -u nullglob
 tabelas="$(psql "$DB" -tAc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null || echo '?')"
 ok "banco atualizado — ${aplicados} arquivo(s) aplicado(s), ${tabelas} tabelas públicas"
 
+# 5.1 — cron das Edge Functions apontando SEMPRE para esta VPS (nunca Supabase)
+info "reagendando cron das functions para a API local…"
+CRON_URL="${PUBLIC_API_URL:-http://gateway}/functions/v1/meta-whatsapp-crm"
+psql "$DB" -q -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.functions_url = '${PUBLIC_API_URL:-http://gateway}'" >/dev/null 2>&1 || true
+psql "$DB" -v ON_ERROR_STOP=0 -q >/tmp/zapmro-cron.log 2>&1 <<SQLCRON || true
+DO \$\$
+DECLARE j record;
+BEGIN
+  FOR j IN SELECT jobname, command FROM cron.job LOOP
+    IF j.command ILIKE '%supabase.co%' THEN
+      PERFORM cron.unschedule(j.jobname);
+    END IF;
+  END LOOP;
+END \$\$;
+
+SELECT cron.schedule('process-scheduled-flows-every-minute', '* * * * *', \$job\$
+  SELECT net.http_post(
+    url := '${CRON_URL}',
+    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${ANON_KEY}"}'::jsonb,
+    body := jsonb_build_object('action','processScheduled','source','cron','ts', now()),
+    timeout_milliseconds := 20000
+  );
+\$job\$);
+
+SELECT cron.schedule('process-countdown-triggers', '*/2 * * * *', \$job\$
+  SELECT net.http_post(
+    url := '${CRON_URL}',
+    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${ANON_KEY}"}'::jsonb,
+    body := '{"action": "processCountdownTriggers"}'::jsonb,
+    timeout_milliseconds := 20000
+  );
+\$job\$);
+
+SELECT cron.schedule('ai-recovery-every-10min', '*/10 * * * *', \$job\$
+  SELECT net.http_post(
+    url := '${CRON_URL}',
+    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${ANON_KEY}"}'::jsonb,
+    body := '{"action": "processAiRecovery"}'::jsonb,
+    timeout_milliseconds := 30000
+  );
+\$job\$);
+SQLCRON
+sobrou_supabase="$(psql "$DB" -tAc "select count(*) from cron.job where command ilike '%supabase.co%'" 2>/dev/null || echo '?')"
+ok "cron apontando para ${CRON_URL} (jobs com Supabase restantes: ${sobrou_supabase})"
+
 # depois de garantir roles/senhas, os serviços que conectam no banco precisam
 # reconectar (PostgREST fica em Restarting se subiu antes das roles existirem)
 info "reiniciando serviços que dependem do banco…"

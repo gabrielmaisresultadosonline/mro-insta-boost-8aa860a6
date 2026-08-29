@@ -789,7 +789,7 @@ BEGIN
   
   -- We'll use a direct call to the edge function
   PERFORM net.http_post(
-    url := 'https://adljdeekwifwcdcgbpit.supabase.co/functions/v1/meta-whatsapp-crm',
+    url := coalesce(current_setting('app.settings.functions_url', true), 'http://gateway') || '/functions/v1/meta-whatsapp-crm',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)

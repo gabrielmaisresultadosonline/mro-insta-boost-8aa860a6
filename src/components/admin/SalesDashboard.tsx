@@ -55,7 +55,7 @@ const PIXEL_CONFIG_KEY = 'mro_pixel_config';
 const KIWIFY_CONFIG_KEY = 'mro_kiwify_config';
 
 // Webhook URL for Kiwify
-const WEBHOOK_URL = 'https://adljdeekwifwcdcgbpit.supabase.co/functions/v1/kiwify-webhook';
+const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kiwify-webhook`;
 
 const getPaidMembers = (): PaidMemberUser[] => {
   const stored = localStorage.getItem(PAID_MEMBERS_KEY);
