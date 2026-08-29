@@ -50,7 +50,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role')  THEN CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticator') THEN EXECUTE format('CREATE ROLE authenticator LOGIN NOINHERIT PASSWORD %L', p); END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_auth_admin')     THEN EXECUTE format('CREATE ROLE supabase_auth_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L', p); END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_storage_admin')  THEN EXECUTE format('CREATE ROLE supabase_storage_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L', p); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_storage_admin')  THEN EXECUTE format('CREATE ROLE supabase_storage_admin LOGIN CREATEROLE NOINHERIT BYPASSRLS PASSWORD %L', p); END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_admin')          THEN EXECUTE format('CREATE ROLE supabase_admin LOGIN SUPERUSER PASSWORD %L', p); END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_realtime_admin') THEN EXECUTE format('CREATE ROLE supabase_realtime_admin LOGIN NOINHERIT PASSWORD %L', p); END IF;
   EXECUTE format('ALTER ROLE authenticator           PASSWORD %L', p);
@@ -60,10 +60,11 @@ BEGIN
   EXECUTE format('ALTER ROLE supabase_realtime_admin PASSWORD %L', p);
   EXECUTE 'ALTER ROLE supabase_admin SUPERUSER';
   EXECUTE 'ALTER ROLE supabase_auth_admin  CREATEROLE';
-  EXECUTE 'ALTER ROLE supabase_storage_admin CREATEROLE';
+  EXECUTE 'ALTER ROLE supabase_storage_admin CREATEROLE BYPASSRLS';
 END \$\$;
 
 GRANT anon, authenticated, service_role TO authenticator;
+GRANT anon, authenticated, service_role TO supabase_storage_admin;
 GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_admin;
 GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_auth_admin;
 GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_storage_admin;

@@ -25,7 +25,9 @@ BEGIN
     EXECUTE format('CREATE ROLE supabase_auth_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L', :'pgpass');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_storage_admin') THEN
-    EXECUTE format('CREATE ROLE supabase_storage_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L', :'pgpass');
+    EXECUTE format('CREATE ROLE supabase_storage_admin LOGIN CREATEROLE NOINHERIT BYPASSRLS PASSWORD %L', :'pgpass');
+  ELSE
+    ALTER ROLE supabase_storage_admin CREATEROLE BYPASSRLS;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supabase_admin') THEN
     EXECUTE format('CREATE ROLE supabase_admin LOGIN SUPERUSER PASSWORD %L', :'pgpass');
@@ -35,6 +37,9 @@ BEGIN
 END $$;
 
 GRANT anon, authenticated, service_role TO authenticator;
+-- Storage API muda para o papel contido no JWT durante cada requisição.
+-- Sem estas associações, até a service key termina sujeita às policies de RLS.
+GRANT anon, authenticated, service_role TO supabase_storage_admin;
 GRANT ALL ON DATABASE postgres TO supabase_admin;
 GRANT ALL ON DATABASE postgres TO supabase_auth_admin;
 GRANT ALL ON DATABASE postgres TO supabase_storage_admin;
