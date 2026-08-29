@@ -113,18 +113,22 @@ function ReportStat({
 /**
  * MigrationPanel — exporta dump SQL do banco conectado
  */
+type DumpFile = { name: string; content: string };
+
 function MigrationPanel({ creds }: { creds: { email: string; password: string } }) {
   const [dumping, setDumping] = useState(false);
   const [progress, setProgress] = useState<DumpProgress | null>(null);
   const [dumpResult, setDumpResult] = useState<{
     sql: string;
     readme?: string;
+    files?: DumpFile[];
     tablesCount: number;
     rowsCount: number;
     usersCount?: number;
     filesCount?: number;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+
 
   async function startDump() {
     setDumping(true);
