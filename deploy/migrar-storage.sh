@@ -50,8 +50,9 @@ SQL
 # O nginx resolve TODOS os upstreams (auth/rest/realtime/storage/functions) ao
 # iniciar. Um simples `restart gateway` falha se qualquer container não existir
 # na rede, como ocorreu com "host not found in upstream realtime". `up gateway`
-# cria/inicia as dependências declaradas e só então inicia o gateway.
-( cd "$STACK" && docker compose up -d gateway >/dev/null )
+# cria/inicia as dependências declaradas; a recriação garante que a configuração
+# com resolução DNS dinâmica seja carregada mesmo após um restart loop antigo.
+( cd "$STACK" && docker compose up -d --force-recreate gateway >/dev/null )
 ok "papéis anon/authenticated/service_role liberados para o Storage"
 
 sec "Esperando a stack local responder"
