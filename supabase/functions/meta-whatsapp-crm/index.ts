@@ -2788,7 +2788,7 @@ async function syncOutboundStatusFromMeta(supabase: any, userId: string, statusE
     .from('crm_messages')
     .select('id, user_id, metadata, message_type, media_url, status')
     .eq('meta_message_id', metaMessageId)
-    .or(`user_id.eq.${userId},user_id.is.null`)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -3856,6 +3856,7 @@ async function fetchAndStoreIncomingMedia(
  
    let userId: string | null = null;
    let userSettings: any = null;
+    let trustedInternalRequest = false;
  
    // Handle Meta Webhook Verification (GET)
    if (req.method === 'GET') {
@@ -3906,8 +3907,10 @@ async function fetchAndStoreIncomingMedia(
       const authHeader = req.headers.get('Authorization');
       if (authHeader) {
         const token = authHeader.replace('Bearer ', '');
-        if (token === 'INTERNAL_BYPASS') {
-          console.log('[AUTH-DEBUG] Internal bypass detected');
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+        if (serviceRoleKey && token === serviceRoleKey) {
+          trustedInternalRequest = true;
+          console.log('[AUTH-DEBUG] Trusted internal request detected');
           userId = null; // Will be resolved from params if needed
         } else {
           const { data: { user }, error: authError } = await supabase.auth.getUser(token);
@@ -3937,17 +3940,18 @@ async function fetchAndStoreIncomingMedia(
       
       const { action, ...params } = body;
       
-      // Se userId ainda for nulo mas tivermos um contactId, tentamos resolver o userId a partir do contato
-      if (!userId && params.contactId) {
+      // Somente chamadas internas autenticadas pela service role podem resolver
+      // o proprietário a partir do contato (continuação assíncrona de fluxos).
+      if (!userId && trustedInternalRequest && params.contactId) {
         const { data: contact } = await supabase.from('crm_contacts').select('user_id').eq('id', params.contactId).maybeSingle();
         if (contact?.user_id) {
           userId = contact.user_id;
           console.log('[AUTH-DEBUG] Resolvido userId a partir do contactId:', userId);
         }
-      } else if (!userId && params.waId) {
+      } else if (!userId && trustedInternalRequest && params.waId) {
         // Fallback: tentar resolver userId pelo waId (telefone) do contato
         const normalizedWaId = normalizePhone(params.waId);
-        const { data: contactByWaId } = await supabase.from('crm_contacts').select('user_id').eq('phone', normalizedWaId).maybeSingle();
+        const { data: contactByWaId } = await supabase.from('crm_contacts').select('user_id').eq('wa_id', normalizedWaId).limit(1).maybeSingle();
         if (contactByWaId?.user_id) {
           userId = contactByWaId.user_id;
           console.log('[AUTH-DEBUG] Resolvido userId a partir do waId:', userId);
@@ -3964,7 +3968,7 @@ async function fetchAndStoreIncomingMedia(
       }
       
       // Se ainda não temos settings mas temos um contactId, tentamos buscar pelo user_id do contato
-      if (!settings && params.contactId) {
+      if (!settings && trustedInternalRequest && params.contactId) {
         const { data: contactForId } = await supabase.from('crm_contacts').select('user_id').eq('id', params.contactId).maybeSingle();
         if (contactForId?.user_id) {
            userId = contactForId.user_id;
@@ -3977,6 +3981,10 @@ async function fetchAndStoreIncomingMedia(
       console.log(`[REQUEST-DEBUG] Method: ${req.method}, Action: ${action || 'Webhook'}, AuthUID: ${userId}, HasSettings: ${!!settings}`);
       if (action === 'sendMessage') {
         console.log(`[SEND-MESSAGE-DEBUG] To: ${params.to}, Text: ${params.text?.slice(0, 30)}..., HasIDs: ${!!settings?.meta_phone_number_id}`);
+      }
+
+      if (action && !userId && !trustedInternalRequest) {
+        return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
       }
 
       if (action === 'getCloudSettings') {
@@ -4929,11 +4937,13 @@ async function fetchAndStoreIncomingMedia(
 
     if (action === 'startFlow') {
       const { flowId, contactId, waId } = params
+      if (!userId) return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
       
       const { data: currentContact, error: contactError } = await supabase
         .from('crm_contacts')
         .select('flow_state, current_flow_id, status, user_id, wa_id')
         .eq('id', contactId)
+        .eq('user_id', userId)
         .single();
         
       if (contactError) throw contactError;
@@ -4942,6 +4952,7 @@ async function fetchAndStoreIncomingMedia(
         .from('crm_flows')
         .select('*')
         .eq('id', flowId)
+        .eq('user_id', userId)
         .single()
       
       if (flowError) throw flowError;
@@ -4970,7 +4981,7 @@ async function fetchAndStoreIncomingMedia(
           updateData.ai_agent_prompt = startNode.data.prompt;
         }
 
-        const { error: updateError } = await supabase.from('crm_contacts').update(updateData).eq('id', contactId);
+        const { error: updateError } = await supabase.from('crm_contacts').update(updateData).eq('id', contactId).eq('user_id', userId);
         
         if (updateError) {
           console.error(`[START-FLOW] Error updating contact ${contactId}:`, updateError);
@@ -5829,13 +5840,23 @@ Retorne apenas a mensagem completamente convertida. Não explique. Não faça ob
     if (action === 'clearHistory') {
       const { contactId } = params;
       if (!contactId) throw new Error('contactId is required');
+      if (!userId) return jsonResponse({ success: false, error: 'Unauthorized' }, 401);
+
+      const { data: ownedContact } = await supabase
+        .from('crm_contacts')
+        .select('id')
+        .eq('id', contactId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!ownedContact) return jsonResponse({ success: false, error: 'Contact not found' }, 404);
 
       console.log(`[CLEAR-HISTORY] Clearing message history for contact ${contactId}`);
 
       const { error: deleteError } = await supabase
         .from('crm_messages')
         .delete()
-        .eq('contact_id', contactId);
+        .eq('contact_id', contactId)
+        .eq('user_id', userId);
 
       if (deleteError) {
         console.error(`[CLEAR-HISTORY] Error deleting messages:`, deleteError);
@@ -5860,7 +5881,8 @@ Retorne apenas a mensagem completamente convertida. Não explique. Não faça ob
             last_processed_message_id: null
           }
         })
-        .eq('id', contactId);
+        .eq('id', contactId)
+        .eq('user_id', userId);
 
       return jsonResponse({ success: true, message: 'Histórico limpo com sucesso' });
     }
