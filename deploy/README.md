@@ -158,3 +158,35 @@ Certifique-se que o `try_files` está configurado no Nginx para redirecionar par
 ---
 
 **Desenvolvido com ❤️ por MRO - Mais Resultados Online**
+
+## migrar-tudo.sh — backup COMPLETO para migrar depois (offline)
+
+Gera um pacote datado com TUDO que dá para salvar por terminal, num comando só:
+
+```
+chmod +x deploy/migrar-tudo.sh
+./deploy/migrar-tudo.sh           # --dry só testa conexões
+```
+
+Variáveis (ambiente ou `~/.zapmro-migracao.conf`):
+`SUPABASE_URL`, `SUPABASE_PROJECT_REF`, `DB_URL` **ou** `POSTGRES_PASSWORD` (ou
+rode em ambiente com `PGHOST/PGPASSWORD`). Opcional: `SUPABASE_SERVICE_ROLE_KEY`
+(habilita auth.users/identities e baixar binários do Storage diretamente) e/ou
+`ADMIN_EMAIL`/`ADMIN_PASSWORD` (fallback via Edge Function crm-central-admin).
+
+Pacote gerado em `migracao-zapmro-<data>/`:
+- `01_banco_public.sql` — tabelas, dados, funções, triggers, RLS, índices, FKs, grants, views
+- `02_auth.sql` — `auth.users` + `auth.identities` (com hashes; testar login no destino)
+- `03_storage_inventario.sql` — buckets + inventário de arquivos
+- `04_extras.sql` — `CREATE EXTENSION` + jobs do `pg_cron`
+- `05_edge-functions.zip` — código das ~118 Edge Functions + `config.toml`
+- `06_storage/` — binários baixados (se `SUPABASE_SERVICE_ROLE_KEY` fornecida)
+- `salvar-storage.mjs` / `restaurar-storage.mjs` — baixar/restaurar binários
+- `restaurar.sh` — carrega o pacote no novo banco com `psql`
+- `07_MANIFESTO.md` — secrets (nomes), webhooks, redirects, OAuth, buckets, cron
+- `08_CHECKLIST.md` — o que NÃO entra e precisa ser refeito à mão (30–60 min)
+
+> O que **não** dá para salvar em arquivo (vive em plataformas externas / segredos
+> criptografados): valores dos secrets, assinatura `subscribed_apps` da Meta,
+> config do app OAuth (Google Cloud / Facebook) e webhooks do InfinitePay/Z-API.
+> Esses estão documentados no `08_CHECKLIST.md` para reconfiguração manual.
