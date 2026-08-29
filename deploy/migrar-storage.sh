@@ -46,27 +46,42 @@ GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
 SQL
-( cd "$STACK" && docker compose restart storage >/dev/null )
+( cd "$STACK" && docker compose up -d storage >/dev/null )
+# O nginx resolve o upstream "storage" quando inicia. Reiniciá-lo depois do
+# Storage evita manter endereço/conexões antigas e responder 502 durante toda a
+# migração caso o container tenha sido recriado.
+( cd "$STACK" && docker compose restart gateway >/dev/null )
 ok "papéis anon/authenticated/service_role liberados para o Storage"
 
 sec "Esperando a stack local responder"
 storage_ready=0
 ultimo_codigo="000"
-for i in $(seq 1 60); do
+for i in $(seq 1 90); do
   # o Storage responde 200 (lista) ou 4xx (payload/rota) — qualquer um prova que
-  # está no ar. Só 000 (fora do ar) ou 5xx contam como "não respondeu".
-  ultimo_codigo="$(curl -s -o /tmp/zapmro-storage-check.json -m 10 -w '%{http_code}' \
+  # está no ar. Capturamos a falha sem `|| echo 000`: o curl já escreve "000"
+  # com -w quando não conecta, e o fallback antigo produzia "000000", aceito
+  # equivocadamente como sucesso.
+  if ! ultimo_codigo="$(curl -sS -o /tmp/zapmro-storage-check.json -m 10 -w '%{http_code}' \
     "$LOCAL_URL/storage/v1/bucket" \
-    -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY" 2>/dev/null || echo 000)"
-  if [ "$ultimo_codigo" != "000" ] && [ "${ultimo_codigo:0:1}" != "5" ]; then
+    -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY" 2>/dev/null)"; then
+    ultimo_codigo="000"
+  fi
+  if [[ "$ultimo_codigo" =~ ^[234][0-9]{2}$ ]]; then
     storage_ready=1
     break
   fi
   sleep 2
 done
 if [ "$storage_ready" != 1 ]; then
-  err "Storage não respondeu (último HTTP: $ultimo_codigo). Últimas linhas do log:"
-  ( cd "$STACK" && docker compose logs --tail 40 storage ) || true
+  err "Storage não respondeu corretamente (último HTTP: $ultimo_codigo)."
+  echo "Resposta recebida:" >&2
+  sed 's/^/      /' /tmp/zapmro-storage-check.json 2>/dev/null | head -20 >&2 || true
+  echo "Estado dos containers:" >&2
+  ( cd "$STACK" && docker compose ps storage gateway ) >&2 || true
+  echo "Últimas linhas do Storage:" >&2
+  ( cd "$STACK" && docker compose logs --tail 80 storage ) >&2 || true
+  echo "Últimas linhas do gateway:" >&2
+  ( cd "$STACK" && docker compose logs --tail 40 gateway ) >&2 || true
   die "corrija o serviço de Storage e rode ./deploy/migrar-storage.sh de novo"
 fi
 ok "storage local respondendo (HTTP $ultimo_codigo)"
