@@ -1,8 +1,9 @@
 /**
- * Gera somente o modelo seguro dos secrets necessários na VPS.
- * Valores guardados pelo backend são criptografados e não podem ser
- * recuperados por uma Edge Function, inclusive no ambiente publicado.
+ * Exporta o secrets.env já preenchido com os valores acessíveis ao runtime.
+ * Protegido pela mesma credencial administrativa do /admincentral.
+ * Valores mascarados pela plataforma são listados para preenchimento manual.
  */
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
