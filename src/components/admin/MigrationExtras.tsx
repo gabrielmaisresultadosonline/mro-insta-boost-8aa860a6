@@ -3,7 +3,8 @@ import JSZip from "jszip";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Download, Loader2, FileCode2, HardDrive, BookOpen, KeyRound } from "lucide-react";
+import { Download, Loader2, FileCode2, HardDrive, BookOpen, KeyRound, ShieldAlert } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * MigrationExtras — exportações complementares ao dump SQL:
@@ -146,6 +147,46 @@ Buckets copiados: ${STORAGE_BUCKETS.map((b) => `\`${b.name}\` (${b.publicBucket 
 
 export default function MigrationExtras() {
   const [busy, setBusy] = useState<string | null>(null);
+
+  /**
+   * Exporta os valores reais dos secrets via edge function protegida por senha.
+   * Nada é armazenado no frontend — o conteúdo vai direto para download.
+   */
+  async function exportSecrets() {
+    const password = window.prompt(
+      "Senha de admin para liberar a exportação dos secrets:",
+    );
+    if (!password) return;
+
+    setBusy("secrets");
+    try {
+      const { data, error } = await supabase.functions.invoke<{
+        success?: boolean;
+        content?: string;
+        found?: string[];
+        missing?: string[];
+        error?: string;
+      }>("export-secrets", { body: { password } });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success || !data.content) {
+        throw new Error(data?.error ?? "Falha ao exportar secrets");
+      }
+
+      download(data.content, "secrets.env", "text/plain;charset=utf-8");
+      toast.success(
+        `${data.found?.length ?? 0} secrets exportados${
+          data.missing?.length ? ` · ${data.missing.length} vazios` : ""
+        }`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao exportar secrets",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function exportFunctions() {
     setBusy("functions");
@@ -336,6 +377,14 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est�
       action: exportGuide,
       label: "Baixar guia de migração",
     },
+    {
+      id: "secrets",
+      icon: ShieldAlert,
+      title: "secrets.env preenchido",
+      desc: "Exige a senha de admin. Gera o arquivo com os valores reais das chaves para colar no VPS.",
+      action: exportSecrets,
+      label: "Exportar secrets (.env)",
+    },
   ];
 
   return (
@@ -348,14 +397,14 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est�
           <div>
             <h3 className="font-bold text-[#075E54]">O que não cabe no .sql — exporte aqui</h3>
             <p className="text-sm text-[#128C7E]/80">
-              Cada botão gera um pacote separado. Os valores dos secrets nunca são exportados — o guia
-              lista apenas os nomes para você recriar no destino.
+              Cada botão gera um pacote separado. O botão de secrets exige a senha de admin e devolve
+              o arquivo com as chaves em texto puro — guarde com <code>chmod 600</code> e nunca versione.
             </p>
           </div>
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {items.map((item) => (
           <Card key={item.id} className="p-4 bg-white border-[#E8F5F1] flex flex-col gap-3">
             <div className="flex items-center gap-2">
