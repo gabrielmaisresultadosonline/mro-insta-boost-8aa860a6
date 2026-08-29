@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import JSZip from "jszip";
 import { supabase } from "@/integrations/supabase/client";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,18 +115,22 @@ function ReportStat({
 /**
  * MigrationPanel — exporta dump SQL do banco conectado
  */
+type DumpFile = { name: string; content: string };
+
 function MigrationPanel({ creds }: { creds: { email: string; password: string } }) {
   const [dumping, setDumping] = useState(false);
   const [progress, setProgress] = useState<DumpProgress | null>(null);
   const [dumpResult, setDumpResult] = useState<{
     sql: string;
     readme?: string;
+    files?: DumpFile[];
     tablesCount: number;
     rowsCount: number;
     usersCount?: number;
     filesCount?: number;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+
 
   async function startDump() {
     setDumping(true);
@@ -220,13 +226,51 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
         `COMMIT;`,
       ].join("\n");
 
+      // ---- Dumps separados, prontos para deploy/postgres-stack/sql/ ----------
+      const wrap = (titulo: string, corpo: string) =>
+        [
+          `-- ============================================================`,
+          `-- ZAPMRO — ${titulo}`,
+          `-- Gerado em: ${generatedAt}`,
+          `-- ============================================================`,
+          `BEGIN;`,
+          `SET session_replication_role = replica;`,
+          ``,
+          corpo || `-- (vazio)`,
+          ``,
+          `SET session_replication_role = DEFAULT;`,
+          `COMMIT;`,
+        ].join("\n");
+
+      const files: DumpFile[] = [
+        { name: "010-extensions-types-sequences.sql", content: wrap("1. EXTENSIONS / TYPES / SEQUENCES", [s.extensions, s.types, s.sequences].filter(Boolean).join("\n\n")) },
+        { name: "020-schema.sql", content: wrap("2. ESTRUTURA (TABELAS)", s.schema || "") },
+        { name: "030-funcoes.sql", content: wrap("3. FUNCOES POSTGRESQL", s.functions || "") },
+        { name: "040-dados.sql", content: wrap("4. DADOS (SCHEMA PUBLIC)", dataParts.join("\n\n")) },
+        { name: "050-auth.sql", content: wrap("5. AUTH (USUARIOS + IDENTIDADES)", [authParts.join("\n"), identityParts.join("\n")].filter(Boolean).join("\n\n")) },
+        { name: "060-storage.sql", content: wrap("6. STORAGE (BUCKETS + INVENTARIO)", storageParts.join("\n")) },
+        { name: "070-views-fks-indices.sql", content: wrap("7. VIEWS / FKs / INDICES", [s.views, s.fks, s.indexes].filter(Boolean).join("\n\n")) },
+        { name: "080-rls-triggers-grants.sql", content: wrap("8. RLS / TRIGGERS / GRANTS", [s.policies, s.triggers, s.grants].filter(Boolean).join("\n\n")) },
+        { name: "090-cron.sql", content: wrap("9. CRON JOBS", s.cron || "") },
+      ];
+
       const readme = [
         `# MIGRACAO ZAPMRO — COMO IMPORTAR NO NOVO BANCO`,
         ``,
         `Gerado em: ${generatedAt}`,
         `Tabelas: ${tables.length} | Linhas: ${rowsCount} | Usuarios Auth: ${meta.usersCount} | Arquivos Storage: ${filesCount}`,
         ``,
-        `## Importar`,
+        `## Opcao A — comando unico na VPS (recomendado)`,
+        `1. Descompacte este pacote dentro do projeto, em: deploy/postgres-stack/sql/`,
+        `   unzip dumps-sql.zip -d /var/www/ia-mro/deploy/postgres-stack/sql/`,
+        `2. Rode: cd /var/www/ia-mro && ./deploy/atualizar.sh`,
+        `   O script aplica os arquivos em ordem (010 -> 090), registra o que ja foi aplicado`,
+        `   em public._migracoes_aplicadas e nao reaplica o que nao mudou.`,
+        ``,
+        `## Opcao B — manual, arquivo por arquivo`,
+        files.map((f) => `psql "$DB" -f ${f.name}`).join("\n"),
+        ``,
+        `## Opcao C — arquivo unico`,
         `psql "postgres://postgres:SENHA@HOST:5432/postgres" -f mro_backup.sql | tee restore.log`,
         ``,
         `## Fora do SQL (baixe nos outros botoes desta aba)`,
@@ -238,11 +282,13 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
       setDumpResult({
         sql,
         readme,
+        files,
         tablesCount: tables.length,
         rowsCount,
         usersCount: meta.usersCount,
         filesCount,
       });
+
       toast.success("Dump completo gerado com sucesso!");
     } catch (err: any) {
       toast.error(err.message || "Falha ao exportar dump");
@@ -269,6 +315,32 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
     triggerDownload(dumpResult.sql, `mro_backup_${date}.sql`, "text/sql;charset=utf-8");
     toast.success("Download iniciado!");
   }
+
+  /** Baixa todos os dumps separados (010..090) em um ZIP pronto para deploy/postgres-stack/sql/ */
+  async function downloadSqlPack() {
+    if (!dumpResult?.files?.length) return;
+    try {
+      const zip = new JSZip();
+      dumpResult.files.forEach((f) => zip.file(f.name, f.content));
+      if (dumpResult.readme) zip.file("LEIA-ME.md", dumpResult.readme);
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dumps-sql-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${dumpResult.files.length} dumps baixados em ZIP`);
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao gerar o ZIP dos dumps");
+    }
+  }
+
+  /** Baixa um dump específico da lista */
+  function downloadOne(file: DumpFile) {
+    triggerDownload(file.content, file.name, "text/sql;charset=utf-8");
+  }
+
 
   function downloadReadme() {
     if (!dumpResult?.readme) return;
@@ -407,8 +479,49 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
             )}
           </Card>
 
+          {/* Pacote de dumps separados (deploy/postgres-stack/sql/) */}
+          {dumpResult.files && dumpResult.files.length > 0 && (
+            <Card className="p-5 bg-white border-[#E8F5F1] space-y-4">
+              <div className="flex flex-col gap-1">
+                <h4 className="text-base font-bold text-[#075E54]">
+                  Pacote de dumps separados ({dumpResult.files.length} arquivos)
+                </h4>
+                <p className="text-xs text-[#128C7E]/80 leading-relaxed">
+                  Baixe o ZIP e descompacte em <code className="font-mono">deploy/postgres-stack/sql/</code> na VPS.
+                  Depois rode <code className="font-mono">./deploy/atualizar.sh</code> — ele aplica de 010 a 090 na ordem certa.
+                </p>
+              </div>
+
+              <Button onClick={downloadSqlPack} className="bg-[#075E54] hover:bg-[#128C7E] text-white gap-2 w-full sm:w-auto">
+                <Download className="h-4 w-4" /> Baixar todos os dumps (.zip)
+              </Button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {dumpResult.files.map((f) => (
+                  <button
+                    key={f.name}
+                    type="button"
+                    onClick={() => downloadOne(f)}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-[#E8F5F1] bg-[#F0FDF4] px-3 py-2 text-left transition-colors hover:bg-[#E8F5F1]"
+                  >
+                    <span className="truncate font-mono text-xs text-[#075E54]">{f.name}</span>
+                    <span className="shrink-0 text-[10px] text-[#128C7E]/80">
+                      {(f.content.length / 1024).toFixed(0)} KB
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <pre className="rounded-lg bg-slate-900 p-3 text-[11px] leading-relaxed text-green-400 overflow-x-auto">
+{`unzip dumps-sql.zip -d /var/www/ia-mro/deploy/postgres-stack/sql/
+cd /var/www/ia-mro && ./deploy/atualizar.sh`}
+              </pre>
+            </Card>
+          )}
+
           {/* Ações */}
           <div className="flex flex-wrap gap-3">
+
             <Button
               onClick={downloadDump}
               className="bg-[#25D366] hover:bg-[#128C7E] text-white gap-2"
