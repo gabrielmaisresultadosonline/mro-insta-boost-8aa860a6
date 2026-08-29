@@ -4284,18 +4284,21 @@ const CRM = () => {
       
       toast({ title: `Importando ${contacts_to_import.length} contatos...` });
 
+      const { data: { user: importUser } } = await supabase.auth.getUser();
+
       // Processamento em lotes maiores
       for (let i = 0; i < contacts_to_import.length; i += batchSize) {
         const batch = contacts_to_import.slice(i, i + batchSize).map(contact => ({
           wa_id: contact.wa_id,
           name: contact.name,
+          user_id: importUser?.id,
           status: contact.status || 'new',
           source_type: 'imported',
           metadata: contact.metadata || {},
           last_interaction: null
         }));
 
-        const { error } = await supabase.from('crm_contacts').upsert(batch, { onConflict: 'wa_id' });
+        const { error } = await supabase.from('crm_contacts').upsert(batch, { onConflict: 'wa_id,user_id' });
         if (!error) {
           successCount += batch.length;
           // Atualiza a lista periodicamente para feedback visual
