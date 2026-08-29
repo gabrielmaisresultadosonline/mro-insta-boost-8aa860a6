@@ -18,11 +18,17 @@ const REQUIRED: readonly { name: string; source: string }[] = [
   { name: "FACEBOOK_APP_SECRET", source: "app da Meta" },
   { name: "GOOGLE_CLIENT_ID", source: "credencial OAuth do Google" },
   { name: "GOOGLE_CLIENT_SECRET", source: "credencial OAuth do Google" },
+  { name: "GOOGLE_OAUTH_CLIENT_SECRET", source: "usar o mesmo secret OAuth do Google, se essa variável estiver ativa" },
+  { name: "INFINITEPAY_API_KEY", source: "painel InfinitePay" },
+  { name: "INFINITEPAY_WEBHOOK_SECRET", source: "configuração do webhook InfinitePay" },
   { name: "INSTAGRAM_SESSION_ID", source: "sessão da integração Instagram" },
   { name: "LOVABLE_API_KEY", source: "substituir por um provedor de IA disponível fora do Lovable Cloud" },
   { name: "META_CONVERSIONS_API_TOKEN", source: "Gerenciador de Eventos da Meta" },
+  { name: "META_WEBHOOK_VERIFY_TOKEN", source: "usar exatamente o mesmo token configurado no webhook da Meta" },
+  { name: "OPENAI_API_KEY", source: "painel OpenAI, caso as rotas de transcrição/IA continuem ativas" },
   { name: "RAPIDAPI_KEY", source: "painel RapidAPI" },
   { name: "SMTP_PASSWORD", source: "provedor SMTP correspondente" },
+  { name: "STRIPE_SECRET_KEY", source: "painel Stripe, caso os produtos Stripe continuem ativos" },
   { name: "WPP_BOT_TOKEN", source: "provedor do bot WhatsApp" },
   { name: "ZAPMRO_SMTP_PASSWORD", source: "provedor de e-mail do ZapMRO" },
 ];
@@ -39,6 +45,7 @@ const REGENERATED: readonly string[] = [
   "SUPABASE_JWKS",
   "SUPABASE_PUBLISHABLE_KEYS",
   "SUPABASE_SECRET_KEYS",
+  "ADMIN_JWT_SECRET",
 ];
 
 function json(payload: unknown, status = 200) {
@@ -81,6 +88,7 @@ Deno.serve(async (req) => {
     const footer = [
       "",
       "APP_BASE_URL='https://zapmro.com.br'",
+      "SITE_URL='https://zapmro.com.br'",
       "",
       "# ------------------------------------------------------------",
       "# Gerados automaticamente pela stack própria (NÃO copie os antigos):",
