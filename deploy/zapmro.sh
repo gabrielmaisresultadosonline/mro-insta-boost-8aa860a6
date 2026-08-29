@@ -238,12 +238,35 @@ EOF
     ( cd "$STACK" && docker compose ps ) || true
     echo
     G="http://127.0.0.1:${GATEWAY_PORT:-8000}"
-    chk() { printf '  %-30s' "$1"; curl -sf -m 8 "$2" ${3:+-H "$3"} >/dev/null 2>&1 && echo -e "${C_G}OK${N}" || echo -e "${C_R}FALHOU${N}"; }
+    chk() { # 2xx/3xx/4xx = serviço respondeu; somente 000/5xx é indisponibilidade
+      local code
+      printf '  %-30s' "$1"
+      code=$(curl -s -o /dev/null -m 8 -w '%{http_code}' "$2" ${3:+-H "$3"} 2>/dev/null || echo 000)
+      if [ "$code" != "000" ] && [ "${code:0:1}" != "5" ]; then
+        echo -e "${C_G}OK${N} (HTTP $code)"
+      else
+        echo -e "${C_R}FALHOU${N} (HTTP $code)"
+        if [ "$1" = "functions" ]; then
+          warn "últimas mensagens das Functions:"
+          docker logs --tail 25 zapmro-functions 2>&1 | sed 's/^/      /' || true
+        fi
+      fi
+    }
     chk "gateway"  "$G/health"
     chk "auth"     "$G/auth/v1/health"
     chk "rest"     "$G/rest/v1/" "apikey: ${ANON_KEY:-}"
     chk "storage"  "$G/storage/v1/bucket" "Authorization: Bearer ${SERVICE_ROLE_KEY:-}"
     chk "functions" "$G/functions/v1/"
+    realtime_status=$(docker inspect -f '{{.State.Status}}' zapmro-realtime 2>/dev/null || echo ausente)
+    realtime_restarts=$(docker inspect -f '{{.RestartCount}}' zapmro-realtime 2>/dev/null || echo '?')
+    printf '  %-30s' "realtime"
+    if [ "$realtime_status" = "running" ]; then
+      echo -e "${C_G}OK${N} (${realtime_restarts} reinício(s))"
+    else
+      echo -e "${C_R}FALHOU${N} (${realtime_status}; ${realtime_restarts} reinício(s))"
+      warn "últimas mensagens do Realtime:"
+      docker logs --tail 25 zapmro-realtime 2>&1 | sed 's/^/      /' || true
+    fi
     D="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${PG_PORT:-5432}/${POSTGRES_DB:-postgres}"
     echo
     echo "  tabelas públicas : $(psql "$D" -tAc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null || echo '?')"
