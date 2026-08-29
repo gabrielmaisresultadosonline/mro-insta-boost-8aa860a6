@@ -24,11 +24,17 @@ const SECRET_NAMES: readonly string[] = [
   "FACEBOOK_APP_SECRET",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_OAUTH_CLIENT_SECRET",
+  "INFINITEPAY_API_KEY",
+  "INFINITEPAY_WEBHOOK_SECRET",
   "INSTAGRAM_SESSION_ID",
   "LOVABLE_API_KEY",
   "META_CONVERSIONS_API_TOKEN",
+  "META_WEBHOOK_VERIFY_TOKEN",
+  "OPENAI_API_KEY",
   "RAPIDAPI_KEY",
   "SMTP_PASSWORD",
+  "STRIPE_SECRET_KEY",
   "WPP_BOT_TOKEN",
   "ZAPMRO_SMTP_PASSWORD",
 ];
@@ -148,16 +154,8 @@ Buckets copiados: ${STORAGE_BUCKETS.map((b) => `\`${b.name}\` (${b.publicBucket 
 export default function MigrationExtras() {
   const [busy, setBusy] = useState<string | null>(null);
 
-  /**
-   * Exporta os valores reais dos secrets via edge function protegida por senha.
-   * Nada é armazenado no frontend — o conteúdo vai direto para download.
-   */
+  /** Gera o modelo seguro para preencher diretamente na VPS. */
   async function exportSecrets() {
-    const password = window.prompt(
-      "Senha de admin para liberar a exportação dos secrets:",
-    );
-    if (!password) return;
-
     setBusy("secrets");
     try {
       const { data, error } = await supabase.functions.invoke<{
@@ -166,7 +164,7 @@ export default function MigrationExtras() {
         found?: string[];
         missing?: string[];
         error?: string;
-      }>("export-secrets", { body: { password } });
+      }>("export-secrets", { body: {} });
 
       if (error) throw new Error(error.message);
       if (!data?.success || !data.content) {
@@ -174,11 +172,7 @@ export default function MigrationExtras() {
       }
 
       download(data.content, "secrets.env", "text/plain;charset=utf-8");
-      toast.success(
-        `${data.found?.length ?? 0} secrets exportados${
-          data.missing?.length ? ` · ${data.missing.length} vazios` : ""
-        }`,
-      );
+      toast.success(`Modelo gerado · ${data.missing?.length ?? 0} credenciais para preencher na VPS`);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Falha ao exportar secrets",
@@ -380,10 +374,10 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est�
     {
       id: "secrets",
       icon: ShieldAlert,
-      title: "secrets.env preenchido",
-      desc: "Exige a senha de admin. Gera o arquivo com os valores reais das chaves para colar no VPS.",
+      title: "Modelo secrets.env",
+      desc: "Gera a lista completa e informa onde obter cada credencial. Valores criptografados não podem ser extraídos pelo site.",
       action: exportSecrets,
-      label: "Exportar secrets (.env)",
+      label: "Baixar modelo (.env)",
     },
   ];
 
@@ -397,8 +391,8 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est�
           <div>
             <h3 className="font-bold text-[#075E54]">O que não cabe no .sql — exporte aqui</h3>
             <p className="text-sm text-[#128C7E]/80">
-              Cada botão gera um pacote separado. O botão de secrets exige a senha de admin e devolve
-              o arquivo com as chaves em texto puro — guarde com <code>chmod 600</code> e nunca versione.
+              Cada botão gera um pacote separado. Por segurança, o backend não permite recuperar
+              credenciais criptografadas. Preencha o modelo diretamente na VPS, use <code>chmod 600</code> e nunca versione.
             </p>
           </div>
         </div>
