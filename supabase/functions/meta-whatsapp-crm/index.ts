@@ -1497,7 +1497,7 @@ else if (message.type === "unsupported") {
     console.log(`[FLOW-LOG] WEBHOOK: Continuing Flow via BUTTON for ${waId}. Current node: ${contact.current_node_id}, Button: ${buttonId}`);
     
     const { data: result, error: flowErr } = await supabase.functions.invoke('meta-whatsapp-crm', {
-      headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+      headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
       body: { 
         action: 'continueFlow', 
         contactId: contact.id, 
@@ -1536,7 +1536,7 @@ else if (message.type === "unsupported") {
   if (contact && hasActiveFlow && isWaitingResponse && message?.type !== 'interactive') {
     console.log(`[FLOW-LOG] WEBHOOK: Received ${message?.type || 'message'} for flow ${contact.current_flow_id} node ${contact.current_node_id} from ${waId} (text="${(text || '').slice(0,60)}")`);
     const { data: result, error: flowErr } = await supabase.functions.invoke('meta-whatsapp-crm', {
-      headers: { 'Authorization': `Bearer INTERNAL_BYPASS` },
+      headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
       body: { 
         action: 'continueFlow', 
         contactId: contact.id, 
