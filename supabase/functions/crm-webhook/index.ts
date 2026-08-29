@@ -228,6 +228,7 @@ serve(async (req) => {
     if (contact) {
       await supabase.from('crm_messages').insert([{
         contact_id: contact.id,
+        user_id: ownerId,
         direction: 'outbound',
         message_type: 'text',
         content: finalMessageText,
