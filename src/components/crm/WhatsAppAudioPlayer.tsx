@@ -34,6 +34,13 @@ export function WhatsAppAudioPlayer({ src, outbound = false }: WhatsAppAudioPlay
   const [playbackError, setPlaybackError] = useState(false);
   const playableSrc = resolveMediaUrl(src);
 
+  useEffect(() => {
+    setPlaybackError(false);
+    setPlaying(false);
+    setCurrent(0);
+    setDuration(0);
+  }, [playableSrc]);
+
   // Subscribe to global rate changes
   useEffect(() => {
     const fn = (r: number) => {
