@@ -397,8 +397,8 @@ O dump recria \`cron.schedule(...)\`. Confirme que \`pg_cron\` e \`pg_net\` est�
           <div>
             <h3 className="font-bold text-[#075E54]">O que não cabe no .sql — exporte aqui</h3>
             <p className="text-sm text-[#128C7E]/80">
-              Cada botão gera um pacote separado. Os valores dos secrets nunca são exportados — o guia
-              lista apenas os nomes para você recriar no destino.
+              Cada botão gera um pacote separado. O botão de secrets exige a senha de admin e devolve
+              o arquivo com as chaves em texto puro — guarde com <code>chmod 600</code> e nunca versione.
             </p>
           </div>
         </div>
