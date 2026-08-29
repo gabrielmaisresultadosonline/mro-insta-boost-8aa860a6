@@ -2886,10 +2886,42 @@ const guessMedia = (params: any) => {
   return null
 }
 
+/**
+ * Baixa a mídia com fallback para o Storage da VPS.
+ * Áudios/imagens antigos salvos no Supabase gerenciado (`*.supabase.co/storage/...`)
+ * deixaram de responder após a migração; nesse caso reaproveitamos o mesmo caminho
+ * do bucket no Storage local antes de desistir.
+ */
+async function fetchMediaWithFallback(url: string) {
+  let response: Response | null = null;
+  try {
+    response = await fetch(url);
+  } catch (err: any) {
+    console.warn(`[UPLOAD] Falha de rede ao baixar mídia (${url}):`, err?.message || err);
+  }
+
+  if (response?.ok) return response;
+
+  const storageMatch = url.match(/\/storage\/v1\/object\/(?:public\/)?(.+)$/);
+  const localBase = (Deno.env.get('PUBLIC_API_URL') || Deno.env.get('SUPABASE_URL') || '').replace(/\/$/, '');
+  if (storageMatch && localBase && !url.startsWith(localBase)) {
+    const fallbackUrl = `${localBase}/storage/v1/object/public/${storageMatch[1]}`;
+    console.log(`[UPLOAD] Tentando fallback no Storage local: ${fallbackUrl}`);
+    try {
+      const fallbackResponse = await fetch(fallbackUrl);
+      if (fallbackResponse.ok) return fallbackResponse;
+      console.error(`[UPLOAD] Fallback local também falhou (${fallbackResponse.status})`);
+    } catch (err: any) {
+      console.error('[UPLOAD] Erro no fallback local:', err?.message || err);
+    }
+  }
+
+  throw new Error(`Falha ao baixar mídia (${response?.status ?? 'sem resposta'}) — arquivo pode ter ficado no Storage antigo: ${url}`);
+}
+
 async function uploadMediaToMeta(accessToken: string, phoneNumberId: string, media: { type: string; url: string; mime: string; fileName: string }) {
   console.log(`[UPLOAD] Baixando mídia: ${media.url}`);
-  const mediaResponse = await fetch(media.url)
-  if (!mediaResponse.ok) throw new Error(`Falha ao baixar mídia (${mediaResponse.status})`)
+  const mediaResponse = await fetchMediaWithFallback(media.url)
   
   const arrayBuffer = await mediaResponse.arrayBuffer();
   const responseContentType = mediaResponse.headers.get('content-type') || '';
