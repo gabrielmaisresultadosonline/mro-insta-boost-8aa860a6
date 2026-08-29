@@ -128,7 +128,7 @@ if [ "$MODE" = "full" ] || [ "$MODE" = "sync" ]; then
 
   (
     pg_dump "$SRC_DB_URL" \
-      --schema=public --no-owner --no-privileges=false --no-publications --no-subscriptions \
+      --schema=public --no-owner --no-publications --no-subscriptions \
       --quote-all-identifiers --file "$DUMP_DIR/01_public.sql" 2>"$LOGS/dump-public.log" \
       || pg_dump "$SRC_DB_URL" --schema=public --no-owner \
            --file "$DUMP_DIR/01_public.sql" 2>>"$LOGS/dump-public.log"
