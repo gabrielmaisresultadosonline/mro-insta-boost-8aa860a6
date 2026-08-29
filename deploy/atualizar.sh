@@ -277,7 +277,9 @@ BEGIN
   END LOOP;
 END \$\$;
 
-SELECT cron.schedule('process-scheduled-flows-every-minute', '* * * * *', \$job\$
+-- O worker roda na VPS a cada 15 segundos. Assim delays curtos continuam mesmo
+-- com todas as abas fechadas; o claim atômico em crm_contacts evita duplicidade.
+SELECT cron.schedule('process-scheduled-flows-every-minute', '15 seconds', \$job\$
   SELECT net.http_post(
     url := '${CRON_URL}',
     headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${SERVICE_ROLE_KEY}"}'::jsonb,
