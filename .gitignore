@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# stack PostgreSQL própria
+deploy/.migracao/
+deploy/postgres-stack/.env
+deploy/postgres-stack/secrets.env
+.env.postgres
