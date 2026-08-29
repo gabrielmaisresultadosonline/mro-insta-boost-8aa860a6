@@ -5267,8 +5267,11 @@ async function fetchAndStoreIncomingMedia(
           if (res?.message?.includes('AI handling state') && text) {
             // Se o nó de IA foi ativado por uma resposta do cliente (o que o 'text' indica),
             // então ele deve processar a resposta agora.
-            console.log(`[CONTINUE-FLOW] Moved to AI handling state. Scheduling AI response with delay for ${waId}. Source: ${sourceMessageId}`);
-            setTimeout(async () => {
+            console.log(`[CONTINUE-FLOW] Moved to AI handling state. Processing AI response safely for ${waId}. Source: ${sourceMessageId}`);
+            // Não use setTimeout desacoplado aqui: o Edge Runtime pode encerrar o
+            // worker assim que a resposta HTTP termina. Aguardar mantém a execução
+            // na nuvem confiável mesmo com o navegador fechado.
+            await (async () => {
               const { data: updatedContact } = await supabase.from('crm_contacts').select('*').eq('id', contactId).single();
               if (updatedContact) {
                 // Se o nó IA está configurado para aguardar resposta antes da primeira interação
@@ -5305,7 +5308,7 @@ async function fetchAndStoreIncomingMedia(
                 await new Promise(resolve => setTimeout(resolve, 3000));
                 await processAiAgentResponse(supabase, updatedContact, waId, finalAiText, sourceMessageId, updatedContact.user_id);
               }
-            }, 500);
+            })();
           } else if (res?.message?.includes('AI handling state') && !text) {
             // Se NÃO há texto (foi uma transição automática do nó anterior para o IA),
             // colocamos o estado em 'waiting_response' para que o IA responda apenas após a próxima mensagem do cliente.

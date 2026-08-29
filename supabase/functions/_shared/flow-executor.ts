@@ -369,9 +369,11 @@ export async function executeVisualNode(supabase: any, flow: any, node: any, con
       const initialMessageText = node.data?.initialMessage || "";
       if (initialMessageText) {
         console.log(`[EXECUTOR] Sending AI Agent initial message: ${initialMessageText}`);
-        await supabase.functions.invoke('meta-whatsapp-crm', {
+        const { error: initialMessageError } = await supabase.functions.invoke('meta-whatsapp-crm', {
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}` },
           body: { action: 'sendMessage', to: waId, text: initialMessageText, contactId }
         });
+        if (initialMessageError) throw initialMessageError;
       }
 
       console.log(`[EXECUTOR] Updating contact ${contactId} to ai_handling state. prompt length: ${prompt.length}`);
