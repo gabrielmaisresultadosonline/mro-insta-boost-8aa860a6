@@ -184,7 +184,7 @@ ok ".env do frontend apontando para ${API} (sem Supabase)"
 if [ "$SEM_BUILD" = "1" ]; then
   warn "build pulado (SEM_BUILD=1)"
 else
-  if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --legacy-peer-deps; else npm install --no-audit --no-fund --legacy-peer-deps; fi
+  npm install --no-audit --no-fund --legacy-peer-deps
   rm -rf dist
   npm run build
   ok "build gerado em dist/ (vídeos, imagens e assets incluídos)"
