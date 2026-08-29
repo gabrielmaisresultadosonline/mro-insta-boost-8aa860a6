@@ -139,6 +139,55 @@ DB="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${PG_PORT:-5432}/${POST
 # ------------------------------------------------------------------ 5) banco --
 sec "5/9 Banco (tabelas, funções, RLS, índices, cron)"
 mkdir -p "$SQLDIR"
+
+# 5.0 — base obrigatória (roles, schemas, senhas). Idempotente, roda SEMPRE.
+#       Sem isso os dumps quebram com: role "supabase_admin" does not exist
+info "garantindo roles, schemas e senhas do banco…"
+psql "$DB" -v ON_ERROR_STOP=0 -q >/tmp/zapmro-bootstrap.log 2>&1 <<SQLBOOT || true
+DO \$\$
+DECLARE p text := '${POSTGRES_PASSWORD}';
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon')          THEN CREATE ROLE anon NOLOGIN NOINHERIT; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN NOINHERIT; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role')  THEN CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticator') THEN EXECUTE format('CREATE ROLE authenticator LOGIN NOINHERIT PASSWORD %L', p); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_auth_admin')    THEN EXECUTE format('CREATE ROLE supabase_auth_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L', p); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_storage_admin') THEN EXECUTE format('CREATE ROLE supabase_storage_admin LOGIN CREATEROLE NOINHERIT PASSWORD %L', p); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_admin')         THEN EXECUTE format('CREATE ROLE supabase_admin LOGIN SUPERUSER PASSWORD %L', p); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='supabase_realtime_admin') THEN EXECUTE format('CREATE ROLE supabase_realtime_admin LOGIN NOINHERIT PASSWORD %L', p); END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='dashboard_user')          THEN CREATE ROLE dashboard_user NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='pgbouncer')               THEN EXECUTE format('CREATE ROLE pgbouncer LOGIN PASSWORD %L', p); END IF;
+  -- as senhas SEMPRE acompanham o POSTGRES_PASSWORD atual (evita o
+  -- "password authentication failed for user authenticator" no PostgREST)
+  EXECUTE format('ALTER ROLE authenticator            PASSWORD %L', p);
+  EXECUTE format('ALTER ROLE supabase_auth_admin      PASSWORD %L', p);
+  EXECUTE format('ALTER ROLE supabase_storage_admin   PASSWORD %L', p);
+  EXECUTE format('ALTER ROLE supabase_admin           PASSWORD %L', p);
+  EXECUTE format('ALTER ROLE supabase_realtime_admin  PASSWORD %L', p);
+  EXECUTE format('ALTER ROLE pgbouncer                PASSWORD %L', p);
+  EXECUTE 'ALTER ROLE supabase_admin SUPERUSER';
+  EXECUTE 'ALTER ROLE supabase_auth_admin CREATEROLE';
+  EXECUTE 'ALTER ROLE supabase_storage_admin CREATEROLE';
+END \$\$;
+
+GRANT anon, authenticated, service_role TO authenticator;
+GRANT ALL ON SCHEMA public TO postgres, supabase_admin;
+
+CREATE SCHEMA IF NOT EXISTS extensions     AUTHORIZATION supabase_admin;
+CREATE SCHEMA IF NOT EXISTS auth           AUTHORIZATION supabase_auth_admin;
+CREATE SCHEMA IF NOT EXISTS storage        AUTHORIZATION supabase_storage_admin;
+CREATE SCHEMA IF NOT EXISTS realtime       AUTHORIZATION supabase_admin;
+CREATE SCHEMA IF NOT EXISTS _realtime      AUTHORIZATION supabase_admin;
+CREATE SCHEMA IF NOT EXISTS graphql_public AUTHORIZATION supabase_admin;
+CREATE SCHEMA IF NOT EXISTS vault          AUTHORIZATION supabase_admin;
+CREATE SCHEMA IF NOT EXISTS cron;
+
+GRANT USAGE ON SCHEMA public, extensions, auth, storage TO anon, authenticated, service_role;
+GRANT ALL ON SCHEMA auth    TO supabase_auth_admin;
+GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
+SQLBOOT
+ok "roles e schemas prontos"
+
 aplicados=0
 shopt -s nullglob
 arquivos=("$SQLDIR"/*.sql)
@@ -147,23 +196,49 @@ if [ ${#arquivos[@]} -eq 0 ]; then
   warn "coloque ali o dump gerado em /admincentral → Migração (ou por deploy/migrar-tudo.sh) e rode de novo"
 else
   psql "$DB" -v ON_ERROR_STOP=0 -q -c "create table if not exists public._migracoes_aplicadas(arquivo text primary key, hash text, aplicado_em timestamptz default now())" >/dev/null
+  # se o banco está praticamente vazio, execuções anteriores só "marcaram" sem
+  # aplicar de fato — limpa o histórico para reaplicar tudo do zero.
+  tab_atual="$(psql "$DB" -tAc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null || echo 0)"
+  if [ "${tab_atual:-0}" -lt 5 ] || [ "${FORCAR_SQL:-0}" = "1" ]; then
+    psql "$DB" -q -c "truncate public._migracoes_aplicadas" >/dev/null 2>&1 || true
+    warn "banco vazio — reaplicando todos os dumps"
+  fi
   for f in $(printf '%s\n' "${arquivos[@]}" | sort); do
     nome="$(basename "$f")"; h="$(sha256sum "$f" | cut -c1-16)"
     ja="$(psql "$DB" -tAc "select hash from public._migracoes_aplicadas where arquivo='${nome}'" 2>/dev/null || true)"
     if [ "$ja" = "$h" ]; then info "· $nome (já aplicado)"; continue; fi
     info "· aplicando $nome"
-    psql "$DB" -v ON_ERROR_STOP=0 -q -f "$f" > "/tmp/zapmro-sql-$nome.log" 2>&1 || true
-    if grep -qiE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log"; then
-      warn "  avisos/erros em $nome (normal em re-execução) → /tmp/zapmro-sql-$nome.log"
+    # os dumps vêm com BEGIN;/COMMIT; — em transação única, UM erro aborta o
+    # arquivo inteiro ("current transaction is aborted"). Removemos o
+    # envelope para cada comando ser independente.
+    tmp="/tmp/zapmro-sql-$nome.exec"
+    sed -E '/^[[:space:]]*(BEGIN|COMMIT|END)[[:space:]]*;[[:space:]]*$/d' "$f" > "$tmp"
+    psql "$DB" -v ON_ERROR_STOP=0 -q -f "$tmp" > "/tmp/zapmro-sql-$nome.log" 2>&1 || true
+    erros=$(grep -ciE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" || true)
+    graves=$(grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" \
+             | grep -viE 'already exists|does not exist, skipping|duplicate key|multiple primary keys|is not a|violates' | wc -l || true)
+    if [ "${erros:-0}" -gt 0 ]; then
+      warn "  ${erros} aviso(s)/erro(s) em $nome → /tmp/zapmro-sql-$nome.log"
+      grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-sql-$nome.log" | sort -u | head -3 | sed 's/^/      /' || true
     fi
-    psql "$DB" -q -c "insert into public._migracoes_aplicadas(arquivo,hash) values ('${nome}','${h}')
-                      on conflict (arquivo) do update set hash=excluded.hash, aplicado_em=now()" >/dev/null
+    if [ "${graves:-0}" -gt 0 ]; then
+      warn "  $nome NÃO foi marcado como aplicado (vai tentar de novo na próxima execução)"
+    else
+      psql "$DB" -q -c "insert into public._migracoes_aplicadas(arquivo,hash) values ('${nome}','${h}')
+                        on conflict (arquivo) do update set hash=excluded.hash, aplicado_em=now()" >/dev/null
+    fi
     aplicados=$((aplicados+1))
   done
 fi
 shopt -u nullglob
 tabelas="$(psql "$DB" -tAc "select count(*) from information_schema.tables where table_schema='public'" 2>/dev/null || echo '?')"
 ok "banco atualizado — ${aplicados} arquivo(s) aplicado(s), ${tabelas} tabelas públicas"
+
+# depois de garantir roles/senhas, os serviços que conectam no banco precisam
+# reconectar (PostgREST fica em Restarting se subiu antes das roles existirem)
+info "reiniciando serviços que dependem do banco…"
+( cd "$STACK" && docker compose restart rest auth storage realtime >/dev/null 2>&1 ) || true
+sleep 5
 
 # -------------------------------------------------------------- 6) functions --
 sec "6/9 Edge Functions (Deno, rodando na sua VPS)"
@@ -224,7 +299,12 @@ fi
 # --------------------------------------------------------------- 9) validação -
 sec "9/9 Validação"
 G="http://127.0.0.1:${GATEWAY_PORT:-8000}"
-chk() { printf '  %-24s' "$1"; if curl -sf -m 10 "$2" ${3:+-H "$3"} >/dev/null 2>&1; then echo -e "${C_G}OK${N}"; else echo -e "${C_R}FALHOU${N}"; fi; }
+chk() { # OK = serviço respondeu HTTP (404 de rota-raiz não é falha; 000 = fora do ar)
+  local code
+  printf '  %-24s' "$1"
+  code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$2" ${3:+-H "$3"} 2>/dev/null || echo 000)
+  if [ "$code" != "000" ] && [ "${code:0:1}" != "5" ]; then echo -e "${C_G}OK${N} (HTTP $code)"; else echo -e "${C_R}FALHOU${N} (HTTP $code)"; fi
+}
 chk "gateway"   "$G/health"
 chk "auth"      "$G/auth/v1/health"
 chk "rest"      "$G/rest/v1/"    "apikey: ${ANON_KEY}"
