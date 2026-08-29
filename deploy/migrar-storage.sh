@@ -33,7 +33,8 @@ export CLOUD_ANON="${CLOUD_ANON:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOi
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-Ga145523@}"
 export LOCAL_URL="${LOCAL_URL:-http://127.0.0.1:${GATEWAY_PORT:-8000}}"
 export LOCAL_SERVICE_KEY="${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY ausente no .env da stack}"
-export CONCURRENCY="${CONCURRENCY:-8}"
+export CONCURRENCY="${CONCURRENCY:-4}"   # baixo para não tomar 429 da nuvem
+export RETRIES="${RETRIES:-5}"
 
 sec "Esperando a stack local responder"
 for i in $(seq 1 60); do
