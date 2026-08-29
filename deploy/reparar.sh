@@ -30,6 +30,7 @@ trap 'err "Falhou na linha $LINENO. Nada foi apagado — corrija e rode ./deploy
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK="$ROOT/deploy/postgres-stack"
 SQLDIR="$STACK/sql"
+NORMALIZER="$ROOT/deploy/normalizar-dump.py"
 
 [ -f "$STACK/.env" ] || die "não achei $STACK/.env — rode ./deploy/atualizar.sh primeiro"
 set -a; . "$STACK/.env"; set +a
@@ -104,6 +105,19 @@ GRANT SELECT ON ALL TABLES IN SCHEMA storage TO anon, authenticated, service_rol
 SQL
 ok "donos ajustados (auth → supabase_auth_admin, storage → supabase_storage_admin)"
 
+# Auth e Storage são responsáveis por criar suas próprias tabelas internas.
+# Iniciá-los antes dos dumps garante que o import encontre o schema da versão
+# instalada, em vez de tentar reconstruí-lo a partir de metadados antigos.
+( cd "$STACK" && docker compose up -d auth storage >/dev/null 2>&1 ) || true
+for _ in $(seq 1 30); do
+  auth_users=$(psql "$DB" -tAc "select to_regclass('auth.users') is not null" 2>/dev/null || true)
+  storage_buckets=$(psql "$DB" -tAc "select to_regclass('storage.buckets') is not null" 2>/dev/null || true)
+  [ "$auth_users" = "t" ] && [ "$storage_buckets" = "t" ] && break
+  sleep 2
+done
+[ "${auth_users:-}" = "t" ] || warn "Auth ainda não criou auth.users; veja: docker logs zapmro-auth"
+[ "${storage_buckets:-}" = "t" ] || warn "Storage ainda não criou storage.buckets; veja: docker logs zapmro-storage"
+
 # ------------------------------------------------------- 3) reaplicar dumps ---
 sec "3/5 Reaplicando os dumps SQL (mostrando os erros reais)"
 shopt -s nullglob
@@ -116,15 +130,17 @@ else
     nome="$(basename "$f")"
     [ "$nome" = "README.md" ] && continue
     info "· $nome"
+    normalized="/tmp/zapmro-rep-$nome.normalized"
     tmp="/tmp/zapmro-rep-$nome.exec"
-    sed -E '/^[[:space:]]*(BEGIN|COMMIT|END)[[:space:]]*;[[:space:]]*$/d' "$f" > "$tmp"
+    python3 "$NORMALIZER" "$f" "$normalized"
+    sed -E '/^[[:space:]]*(BEGIN|COMMIT|END)[[:space:]]*;[[:space:]]*$/d' "$normalized" > "$tmp"
     psql "$DB" -v ON_ERROR_STOP=0 -q -f "$tmp" > "/tmp/zapmro-rep-$nome.log" 2>&1 || true
     graves=$(grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-rep-$nome.log" \
-             | grep -viE 'already exists|does not exist, skipping|duplicate key|multiple primary keys' | wc -l || true)
+             | grep -viE 'already exists|does not exist, skipping|duplicate key|multiple primary keys|role "sandbox_exec" does not exist' | wc -l || true)
     if [ "${graves:-0}" -gt 0 ]; then
       warn "  ${graves} erro(s) real(is) — primeiros:"
       grep -iE '^psql:.*(ERROR|FATAL)' "/tmp/zapmro-rep-$nome.log" \
-        | grep -viE 'already exists|does not exist, skipping|duplicate key|multiple primary keys' \
+        | grep -viE 'already exists|does not exist, skipping|duplicate key|multiple primary keys|role "sandbox_exec" does not exist' \
         | sort -u | head -5 | sed 's/^/      /'
       info "  log completo: /tmp/zapmro-rep-$nome.log"
     else
@@ -183,4 +199,15 @@ echo
 info "Se 'usuários' continuar 0, o dump 050-auth.sql não entrou:"
 info "  grep -i error /tmp/zapmro-rep-050-auth.sql.log | head"
 info "Se o Storage continuar 502:  docker logs --tail 40 zapmro-storage"
-warn "NÃO desligue o Supabase nem troque os webhooks até este relatório sair todo OK."
+public_tables=$(cnt "select count(*) from information_schema.tables where table_schema='public'")
+auth_total=$(cnt "select count(*) from auth.users")
+crm_contacts=$(cnt "select count(*) from public.crm_contacts")
+crm_messages=$(cnt "select count(*) from public.crm_messages")
+if ! [[ "$public_tables" =~ ^[0-9]+$ ]] || [ "$public_tables" -lt 50 ] \
+   || ! [[ "$auth_total" =~ ^[0-9]+$ ]] || [ "$auth_total" -lt 1 ] \
+   || ! [[ "$crm_contacts" =~ ^[0-9]+$ ]] \
+   || ! [[ "$crm_messages" =~ ^[0-9]+$ ]]; then
+  die "VALIDAÇÃO INCOMPLETA: banco ainda não está pronto. NÃO altere os webhooks nem desligue o sistema antigo."
+fi
+ok "VALIDAÇÃO ESSENCIAL APROVADA: schema, Auth, contatos e mensagens foram restaurados."
+warn "Ainda valide login, envio/recebimento e arquivos antes do corte definitivo."
