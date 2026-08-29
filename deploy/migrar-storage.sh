@@ -40,6 +40,7 @@ sec "Corrigindo permissões administrativas do Storage"
 DB="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${PG_PORT:-5432}/${POSTGRES_DB:-postgres}"
 command -v psql >/dev/null 2>&1 || die "psql não instalado"
 psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+ALTER ROLE supabase_storage_admin CREATEROLE BYPASSRLS;
 GRANT anon, authenticated, service_role TO supabase_storage_admin;
 GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
