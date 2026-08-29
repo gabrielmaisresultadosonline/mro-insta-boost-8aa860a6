@@ -165,10 +165,23 @@ sec "4/8  Extras: extensions + pg_cron (via psql)"
   psql "$DB_URL" -At -c "SELECT 'CREATE EXTENSION IF NOT EXISTS ' || e.extname || ' WITH SCHEMA ' || n.nspname || ';' FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname<>'plpgsql' ORDER BY e.extname;" 2>/dev/null || echo "-- (sem permissão p/ listar extensions)"
   echo
   echo "-- PG_CRON JOBS"
+  CRON_OK=0
   if psql "$DB_URL" -At -c "SELECT 1 FROM pg_namespace WHERE nspname='cron'" 2>/dev/null | grep -q 1; then
-    psql "$DB_URL" -At -c "SELECT 'SELECT cron.schedule('||quote_literal(jobname)||', '||quote_literal(schedule)||', '||quote_literal(command)||');' FROM cron.job ORDER BY jobid;" 2>/dev/null || echo "-- (erro ao ler cron.job)"
+    if psql "$DB_URL" -At -c "SELECT 'SELECT cron.schedule('||quote_literal(jobname)||', '||quote_literal(schedule)||', '||quote_literal(command)||');' FROM cron.job ORDER BY jobid;" 2>/dev/null; then
+      CRON_OK=1
+    fi
   else
     echo "-- pg_cron não instalado neste projeto."
+    CRON_OK=1
+  fi
+  # fallback via RPC SECURITY DEFINER (admin_dump_cron) se a leitura direta falhou
+  if [ "$CRON_OK" = 0 ]; then
+    if { [ -n "$SRK" ] || { [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; }; }; then
+      echo "-- (lido via admin_dump_cron)"
+      rpc_text admin_dump_cron "{}" || echo "-- (sem permissão para ler cron.job por nenhuma via)"
+    else
+      echo "-- (erro ao ler cron.job e sem SERVICE_ROLE/ADMIN para fallback via admin_dump_cron)"
+    fi
   fi
 } > "$OUT/04_extras.sql"
 ok "extras: $(wc -l <"$OUT/04_extras.sql") linhas"
