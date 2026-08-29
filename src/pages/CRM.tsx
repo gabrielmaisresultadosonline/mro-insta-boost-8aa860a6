@@ -159,6 +159,27 @@ const getConversationActivityTime = (contact: any): number => {
   return 0;
 };
 
+const getLatestIsoValue = (first: unknown, second: unknown): string | null => {
+  const values = [first, second]
+    .filter(Boolean)
+    .map(value => ({ value: String(value), time: new Date(String(value)).getTime() }))
+    .filter(item => Number.isFinite(item.time))
+    .sort((a, b) => b.time - a.time);
+  return values[0]?.value ?? null;
+};
+
+const compareConversationContacts = (a: any, b: any): number => {
+  const now = Date.now();
+  const windowDuration = 24 * 60 * 60 * 1000;
+  const aInbound = a?.last_message_received_at ? new Date(a.last_message_received_at).getTime() : 0;
+  const bInbound = b?.last_message_received_at ? new Date(b.last_message_received_at).getTime() : 0;
+  const aWindowOpen = aInbound > 0 && now - aInbound < windowDuration;
+  const bWindowOpen = bInbound > 0 && now - bInbound < windowDuration;
+
+  if (aWindowOpen !== bWindowOpen) return aWindowOpen ? -1 : 1;
+  return getConversationActivityTime(b) - getConversationActivityTime(a);
+};
+
 const deduplicateConversationContacts = (rows: any[]): any[] => {
   const byConversation = new Map<string, any>();
 
@@ -180,14 +201,14 @@ const deduplicateConversationContacts = (rows: any[]): any[] => {
     byConversation.set(key, {
       ...oldest,
       ...newest,
+      last_interaction: getLatestIsoValue(oldest.last_interaction, newest.last_interaction),
+      last_message_received_at: getLatestIsoValue(oldest.last_message_received_at, newest.last_message_received_at),
       total_messages_received: Math.max(oldest.total_messages_received ?? 0, newest.total_messages_received ?? 0),
       total_messages_sent: Math.max(oldest.total_messages_sent ?? 0, newest.total_messages_sent ?? 0),
     });
   }
 
-  return Array.from(byConversation.values()).sort((a, b) => {
-    return getConversationActivityTime(b) - getConversationActivityTime(a);
-  });
+  return Array.from(byConversation.values()).sort(compareConversationContacts);
 };
 
 const encodeAudioBufferToWav = (audioBuffer: AudioBuffer) => {
@@ -1558,7 +1579,7 @@ const CRM = () => {
             setContacts(prev => prev.map(c => c.id === newMessage.contact_id
               ? { ...c, last_message_received_at: newMessage.created_at, last_interaction: newMessage.created_at }
               : c
-            ).sort((a, b) => getConversationActivityTime(b) - getConversationActivityTime(a)));
+            ).sort(compareConversationContacts));
 
             setSelectedContact((prev: any) => prev && prev.id === newMessage.contact_id
               ? { ...prev, last_message_received_at: newMessage.created_at, last_interaction: newMessage.created_at }
@@ -1582,7 +1603,7 @@ const CRM = () => {
             setContacts(prev => prev.map(c => c.id === newMessage.contact_id
               ? { ...c, last_interaction: newMessage.created_at }
               : c
-            ).sort((a, b) => getConversationActivityTime(b) - getConversationActivityTime(a)));
+            ).sort(compareConversationContacts));
           }
         } else if (payload.eventType === 'UPDATE') {
           const updatedMessage = payload.new;
@@ -2036,9 +2057,7 @@ const CRM = () => {
           );
         })();
 
-    if (!freezeConversationOrder) return [...filtered].sort(
-      (a, b) => getConversationActivityTime(b) - getConversationActivityTime(a)
-    );
+    if (!freezeConversationOrder) return [...filtered].sort(compareConversationContacts);
 
     // Frozen order: preserve previously seen order, prepend new contacts on top.
     const byId = new Map(filtered.map(c => [c.id, c]));
