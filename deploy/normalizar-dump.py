@@ -9,6 +9,7 @@ Correções aplicadas:
   2. Corpos de função sem o `;` final ganham o terminador.
   3. Colunas GENERATED da versão atual do GoTrue saem dos INSERTs de Auth.
   4. Literais JSON (`[...]`) destinados a colunas text[] viram literais de array.
+  5. Grants para papéis internos da origem que não existem na stack são removidos.
 """
 
 from __future__ import annotations
@@ -276,6 +277,18 @@ def fix_cron_urls(text: str, source_name: str) -> str:
 
 
 # --------------------------------------------------------------------------
+# 6. papéis internos exclusivos da infraestrutura de origem
+# --------------------------------------------------------------------------
+def remove_source_only_role_grants(text: str) -> str:
+    """Remove GRANTs para papéis internos que não pertencem à stack própria."""
+    return re.sub(
+        r"(?mi)^\s*GRANT\s+.+?\s+TO\s+sandbox_exec\s*;\s*$\n?",
+        "",
+        text,
+    )
+
+
+# --------------------------------------------------------------------------
 def normalize(source: Path, destination: Path) -> None:
     text = source.read_text(encoding="utf-8")
     text = fix_column_types(text)
@@ -286,6 +299,7 @@ def normalize(source: Path, destination: Path) -> None:
         schema_path = SQL_DIR / SCHEMA_FILE
     text = fix_array_values(text, load_array_columns(schema_path))
     text = fix_cron_urls(text, source.name)
+    text = remove_source_only_role_grants(text)
 
     lines: list[str] = []
     for line in text.splitlines():
