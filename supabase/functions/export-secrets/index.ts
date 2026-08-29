@@ -1,8 +1,9 @@
 /**
- * Gera somente o modelo seguro dos secrets necessários na VPS.
- * Valores guardados pelo backend são criptografados e não podem ser
- * recuperados por uma Edge Function, inclusive no ambiente publicado.
+ * Exporta o secrets.env já preenchido com os valores acessíveis ao runtime.
+ * Protegido pela mesma credencial administrativa do /admincentral.
+ * Valores mascarados pela plataforma são listados para preenchimento manual.
  */
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,6 +60,27 @@ function json(payload: unknown, status = 200) {
   });
 }
 
+const ADMIN_EMAIL = "mro@gmail.com";
+const ADMIN_PASSWORD = "Ga145523@";
+
+/** Valores injetados pela plataforma que não representam credenciais reais. */
+function isUsable(value: string | undefined): value is string {
+  if (!value) return false;
+  const v = value.trim();
+  if (!v) return false;
+  const upper = v.toUpperCase();
+  return !(
+    upper === "PLACEHOLDER_VALUE" ||
+    upper.startsWith("PLACEHOLDER") ||
+    upper === "REDACTED" ||
+    upper === "MASKED"
+  );
+}
+
+function quote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -67,18 +89,39 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
-    const lines = REQUIRED.flatMap(({ name, source }) => [
-      `# Obter em: ${source}`,
-      `${name}=`,
-    ]);
+    let body: Record<string, unknown> = {};
+    try {
+      body = JSON.parse((await req.text()) || "{}");
+    } catch {
+      body = {};
+    }
+
+    const email = String(body.adminEmail ?? "").trim().toLowerCase();
+    const password = String(body.adminPassword ?? "");
+    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      return json({ error: "Credenciais administrativas inválidas" }, 401);
+    }
+
+    const found: string[] = [];
+    const missing: string[] = [];
+
+    const lines = REQUIRED.flatMap(({ name, source }) => {
+      const value = Deno.env.get(name);
+      if (isUsable(value)) {
+        found.push(name);
+        return [`${name}=${quote(value)}`];
+      }
+      missing.push(name);
+      return [`# Obter em: ${source}`, `${name}=`];
+    });
 
     const header = [
       "# ============================================================",
-      "# secrets.env — modelo seguro para a VPS",
+      "# secrets.env — ZapMRO (stack própria na VPS)",
       `# Data: ${new Date().toISOString()}`,
       "#",
-      "# Preencha diretamente na VPS; não envie os valores por chat.",
-      "# Depois use chmod 600 e NUNCA versione este arquivo no git.",
+      `# Preenchidos automaticamente: ${found.length} · Pendentes: ${missing.length}`,
+      "# Use chmod 600 e NUNCA versione este arquivo no git.",
       "#",
       "# Uso: deploy/postgres-stack/secrets.env",
       "# ============================================================",
@@ -100,12 +143,15 @@ Deno.serve(async (req) => {
     return json({
       success: true,
       content: header + lines.join("\n") + footer,
-      found: [],
-      missing: REQUIRED.map(({ name }) => name),
-      notice: "Os valores criptografados não podem ser recuperados pelo runtime; o arquivo gerado é um modelo para preenchimento seguro na VPS.",
+      found,
+      missing,
+      notice: missing.length
+        ? "Alguns valores são mascarados pela plataforma no runtime e precisam ser colados manualmente na VPS."
+        : "Todos os valores disponíveis foram exportados.",
     });
   } catch (err) {
     console.error("[export-secrets] erro:", err);
     return json({ error: "Erro interno" }, 500);
   }
 });
+
