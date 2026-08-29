@@ -314,6 +314,32 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
     toast.success("Download iniciado!");
   }
 
+  /** Baixa todos os dumps separados (010..090) em um ZIP pronto para deploy/postgres-stack/sql/ */
+  async function downloadSqlPack() {
+    if (!dumpResult?.files?.length) return;
+    try {
+      const zip = new JSZip();
+      dumpResult.files.forEach((f) => zip.file(f.name, f.content));
+      if (dumpResult.readme) zip.file("LEIA-ME.md", dumpResult.readme);
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dumps-sql-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${dumpResult.files.length} dumps baixados em ZIP`);
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao gerar o ZIP dos dumps");
+    }
+  }
+
+  /** Baixa um dump específico da lista */
+  function downloadOne(file: DumpFile) {
+    triggerDownload(file.content, file.name, "text/sql;charset=utf-8");
+  }
+
+
   function downloadReadme() {
     if (!dumpResult?.readme) return;
     const date = new Date().toISOString().slice(0, 10);
