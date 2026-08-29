@@ -143,6 +143,32 @@ const COMMON_CTWA_TRIGGER_TEXTS = [
   'Gostaria de saber sobre o sistema inovador!',
 ];
 
+/**
+ * Carrega um fluxo garantindo o isolamento por usuário.
+ * Fluxos legados migrados da base antiga podem estar com `user_id` NULL:
+ * nesse caso o fluxo é adotado (backfill) pelo usuário que o está executando,
+ * em vez de falhar com "no rows" (que virava HTTP 500 no front).
+ */
+async function loadFlowForUser(supabase: any, flowId: string, userId: string) {
+  const { data: flow, error } = await supabase
+    .from('crm_flows')
+    .select('*')
+    .eq('id', flowId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao carregar o fluxo: ${error.message}`);
+  if (!flow) throw new Error('Fluxo não encontrado');
+
+  if (!flow.user_id) {
+    await supabase.from('crm_flows').update({ user_id: userId }).eq('id', flowId).is('user_id', null);
+    flow.user_id = userId;
+  } else if (flow.user_id !== userId) {
+    throw new Error('Fluxo pertence a outra conta');
+  }
+
+  return flow;
+}
+
 async function getConfiguredCtwaFallbackText(supabase: any, userId?: string) {
   if (!userId) return '';
 
@@ -3903,27 +3929,33 @@ async function fetchAndStoreIncomingMedia(
        userId = settings.user_id;
        userSettings = settings;
      }
-    } else {
-      const authHeader = req.headers.get('Authorization');
-      if (authHeader) {
-        const token = authHeader.replace('Bearer ', '');
-        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-        if (serviceRoleKey && token === serviceRoleKey) {
-          trustedInternalRequest = true;
-          console.log('[AUTH-DEBUG] Trusted internal request detected');
-          userId = null; // Will be resolved from params if needed
-        } else {
-          const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-          if (user) {
-            userId = user.id;
-          } else if (authError) {
-            console.warn('[AUTH-DEBUG] getUser failed with token:', token.slice(0, 10) + '...', authError);
-          }
-        }
-      } else {
-        console.log('[AUTH-DEBUG] No Authorization header present');
-      }
-    }
+     } else {
+       const authHeader = req.headers.get('Authorization');
+       if (authHeader) {
+         const token = authHeader.replace('Bearer ', '');
+         const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+         if (serviceRoleKey && token === serviceRoleKey) {
+           trustedInternalRequest = true;
+           console.log('[AUTH-DEBUG] Trusted internal request detected');
+           userId = null; // Will be resolved from params if needed
+         } else {
+           // Em self-hosted (VPS) o GoTrue pode ficar momentaneamente indisponível.
+           // Nesse caso a exceção não pode derrubar a função inteira com HTTP 500.
+           try {
+             const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+             if (user) {
+               userId = user.id;
+             } else if (authError) {
+               console.warn('[AUTH-DEBUG] getUser failed with token:', token.slice(0, 10) + '...', authError.message);
+             }
+           } catch (authEx: any) {
+             console.error('[AUTH-DEBUG] getUser threw:', authEx?.message || authEx);
+           }
+         }
+       } else {
+         console.log('[AUTH-DEBUG] No Authorization header present');
+       }
+     }
  
     try {
       const rawBody = await req.text();
@@ -4944,19 +4976,12 @@ async function fetchAndStoreIncomingMedia(
         .select('flow_state, current_flow_id, status, user_id, wa_id')
         .eq('id', contactId)
         .eq('user_id', userId)
-        .single();
-        
-      if (contactError) throw contactError;
+        .maybeSingle();
 
-      const { data: flow, error: flowError } = await supabase
-        .from('crm_flows')
-        .select('*')
-        .eq('id', flowId)
-        .eq('user_id', userId)
-        .single()
-      
-      if (flowError) throw flowError;
-      if (!flow) throw new Error('Flow not found')
+      if (contactError) throw new Error(`Falha ao carregar o contato: ${contactError.message}`);
+      if (!currentContact) throw new Error('Contato não encontrado nesta conta');
+
+      const flow = await loadFlowForUser(supabase, flowId, userId);
       
       await supabase.from('crm_scheduled_messages').delete().eq('contact_id', contactId);
 
