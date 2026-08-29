@@ -17,7 +17,7 @@ const ExtensionAnnouncementDocs = ({ announcementId, isOpen, onClose, targetArea
   const { toast } = useToast();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://adljdeekwifwcdcgbpit.supabase.co';
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
 
   const copyToClipboard = (text: string, section: string) => {

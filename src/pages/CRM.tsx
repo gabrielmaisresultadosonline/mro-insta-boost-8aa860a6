@@ -9048,11 +9048,11 @@ const CRM = () => {
                                   <div className="flex gap-2">
                                     <Input 
                                       readOnly 
-                                      value={`https://adljdeekwifwcdcgbpit.supabase.co/functions/v1/crm-webhook`} 
+                                      value={`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crm-webhook`} 
                                       className="font-mono text-[10px] bg-muted/50 rounded-xl"
                                     />
                                     <Button size="sm" variant="outline" className="rounded-xl" onClick={() => {
-                                      navigator.clipboard.writeText(`https://adljdeekwifwcdcgbpit.supabase.co/functions/v1/crm-webhook`);
+                                      navigator.clipboard.writeText(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crm-webhook`);
                                       toast({ title: "URL copiada!" });
                                     }}>
                                       <Paperclip className="w-4 h-4" />
@@ -9088,7 +9088,7 @@ const CRM = () => {
                                 <div className="space-y-4 font-mono text-[11px]">
                                   <p className="text-zinc-500">// Exemplo de requisição no seu site</p>
                                   <div className="bg-black/50 p-4 rounded-xl border border-white/5 overflow-x-auto whitespace-pre text-emerald-400">
-{`fetch("https://adljdeekwifwcdcgbpit.supabase.co/functions/v1/crm-webhook", {
+{`fetch("${import.meta.env.VITE_SUPABASE_URL}/functions/v1/crm-webhook", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
