@@ -60,6 +60,18 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
 GRANT USAGE ON SCHEMA storage TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA storage TO service_role;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA storage TO service_role;
+
+-- Defesa em profundidade: o storage-api executa operações de objeto com o
+-- papel presente no JWT. Estas policies mantêm acesso administrativo somente
+-- para service_role mesmo se o atributo BYPASSRLS for alterado por um restart.
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS service_role_all_objects ON storage.objects;
+CREATE POLICY service_role_all_objects ON storage.objects
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS service_role_all_buckets ON storage.buckets;
+CREATE POLICY service_role_all_buckets ON storage.buckets
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 SQL
 ( cd "$STACK" && docker compose up -d storage >/dev/null )
 # O nginx resolve TODOS os upstreams (auth/rest/realtime/storage/functions) ao

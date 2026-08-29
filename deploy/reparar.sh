@@ -230,6 +230,14 @@ GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_storage_admin IN SCHEMA storage
   GRANT ALL ON TABLES TO supabase_storage_admin;
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS service_role_all_objects ON storage.objects;
+CREATE POLICY service_role_all_objects ON storage.objects
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS service_role_all_buckets ON storage.buckets;
+CREATE POLICY service_role_all_buckets ON storage.buckets
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 SQL
 
 # ------------------------------------------------------- 4) reiniciar stack ---
