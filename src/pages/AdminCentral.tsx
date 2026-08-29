@@ -224,13 +224,51 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
         `COMMIT;`,
       ].join("\n");
 
+      // ---- Dumps separados, prontos para deploy/postgres-stack/sql/ ----------
+      const wrap = (titulo: string, corpo: string) =>
+        [
+          `-- ============================================================`,
+          `-- ZAPMRO — ${titulo}`,
+          `-- Gerado em: ${generatedAt}`,
+          `-- ============================================================`,
+          `BEGIN;`,
+          `SET session_replication_role = replica;`,
+          ``,
+          corpo || `-- (vazio)`,
+          ``,
+          `SET session_replication_role = DEFAULT;`,
+          `COMMIT;`,
+        ].join("\n");
+
+      const files: DumpFile[] = [
+        { name: "010-extensions-types-sequences.sql", content: wrap("1. EXTENSIONS / TYPES / SEQUENCES", [s.extensions, s.types, s.sequences].filter(Boolean).join("\n\n")) },
+        { name: "020-schema.sql", content: wrap("2. ESTRUTURA (TABELAS)", s.schema || "") },
+        { name: "030-funcoes.sql", content: wrap("3. FUNCOES POSTGRESQL", s.functions || "") },
+        { name: "040-dados.sql", content: wrap("4. DADOS (SCHEMA PUBLIC)", dataParts.join("\n\n")) },
+        { name: "050-auth.sql", content: wrap("5. AUTH (USUARIOS + IDENTIDADES)", [authParts.join("\n"), identityParts.join("\n")].filter(Boolean).join("\n\n")) },
+        { name: "060-storage.sql", content: wrap("6. STORAGE (BUCKETS + INVENTARIO)", storageParts.join("\n")) },
+        { name: "070-views-fks-indices.sql", content: wrap("7. VIEWS / FKs / INDICES", [s.views, s.fks, s.indexes].filter(Boolean).join("\n\n")) },
+        { name: "080-rls-triggers-grants.sql", content: wrap("8. RLS / TRIGGERS / GRANTS", [s.policies, s.triggers, s.grants].filter(Boolean).join("\n\n")) },
+        { name: "090-cron.sql", content: wrap("9. CRON JOBS", s.cron || "") },
+      ];
+
       const readme = [
         `# MIGRACAO ZAPMRO — COMO IMPORTAR NO NOVO BANCO`,
         ``,
         `Gerado em: ${generatedAt}`,
         `Tabelas: ${tables.length} | Linhas: ${rowsCount} | Usuarios Auth: ${meta.usersCount} | Arquivos Storage: ${filesCount}`,
         ``,
-        `## Importar`,
+        `## Opcao A — comando unico na VPS (recomendado)`,
+        `1. Descompacte este pacote dentro do projeto, em: deploy/postgres-stack/sql/`,
+        `   unzip dumps-sql.zip -d /var/www/ia-mro/deploy/postgres-stack/sql/`,
+        `2. Rode: cd /var/www/ia-mro && ./deploy/atualizar.sh`,
+        `   O script aplica os arquivos em ordem (010 -> 090), registra o que ja foi aplicado`,
+        `   em public._migracoes_aplicadas e nao reaplica o que nao mudou.`,
+        ``,
+        `## Opcao B — manual, arquivo por arquivo`,
+        files.map((f) => `psql "$DB" -f ${f.name}`).join("\n"),
+        ``,
+        `## Opcao C — arquivo unico`,
         `psql "postgres://postgres:SENHA@HOST:5432/postgres" -f mro_backup.sql | tee restore.log`,
         ``,
         `## Fora do SQL (baixe nos outros botoes desta aba)`,
@@ -242,11 +280,13 @@ function MigrationPanel({ creds }: { creds: { email: string; password: string } 
       setDumpResult({
         sql,
         readme,
+        files,
         tablesCount: tables.length,
         rowsCount,
         usersCount: meta.usersCount,
         filesCount,
       });
+
       toast.success("Dump completo gerado com sucesso!");
     } catch (err: any) {
       toast.error(err.message || "Falha ao exportar dump");
