@@ -65,12 +65,17 @@ serve(async (req) => {
       }
     }
 
-    // Get Meta Settings
+    // Get Meta Settings DO DONO do webhook (isolamento multi-tenant)
+    const ownerId = webhook.user_id
+    if (!ownerId) {
+      throw new Error('Webhook sem dono definido (user_id). Recrie o webhook no CRM.')
+    }
+
     const { data: settings } = await supabase
       .from('crm_settings')
       .select('*')
-      .eq('id', '00000000-0000-0000-0000-000000000001')
-      .single()
+      .eq('user_id', ownerId)
+      .maybeSingle()
 
     if (!settings?.meta_access_token || !settings?.meta_phone_number_id) {
       throw new Error('CRM Meta settings not configured')
@@ -91,7 +96,8 @@ serve(async (req) => {
         .from('crm_templates')
         .select('*')
         .eq('id', tid)
-        .single()
+        .eq('user_id', ownerId)
+        .maybeSingle()
       
       if (!template) throw new Error('Template not found')
 
@@ -193,6 +199,7 @@ serve(async (req) => {
       .from('crm_contacts')
       .select('id, status')
       .eq('wa_id', cleanTo)
+      .eq('user_id', ownerId)
       .maybeSingle();
 
     if (!contact) {
@@ -201,6 +208,7 @@ serve(async (req) => {
         .insert([{
           wa_id: cleanTo,
           name: cleanTo,
+          user_id: ownerId,
           status: webhook.default_status || 'new',
           source_type: `webhook_${webhook.name}`
         }])
@@ -220,6 +228,7 @@ serve(async (req) => {
     if (contact) {
       await supabase.from('crm_messages').insert([{
         contact_id: contact.id,
+        user_id: ownerId,
         direction: 'outbound',
         message_type: 'text',
         content: finalMessageText,

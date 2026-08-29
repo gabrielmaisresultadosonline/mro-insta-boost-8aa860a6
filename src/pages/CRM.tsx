@@ -2890,12 +2890,19 @@ const CRM = () => {
         const contactsToProcess = [...new Set(extractedNumbers)];
         const createdIds: string[] = [];
         
+        const { data: { user: bulkUser } } = await supabase.auth.getUser();
         for (const num of contactsToProcess) {
-          let { data: contact } = await supabase.from('crm_contacts').select('id').eq('wa_id', num).maybeSingle();
+          let { data: contact } = await supabase
+            .from('crm_contacts')
+            .select('id')
+            .eq('wa_id', num)
+            .eq('user_id', bulkUser?.id ?? '')
+            .maybeSingle();
           if (!contact) {
             const { data: newContact, error: createError } = await supabase.from('crm_contacts').insert({
               wa_id: num,
               name: num,
+              user_id: bulkUser?.id,
               status: 'new',
               source_type: 'bulk_import'
             }).select().single();
@@ -3013,12 +3020,19 @@ const CRM = () => {
     setIsScheduling(true);
     try {
       // 1. Garantir que o contato existe ou criar um temporário/persistente
-      let { data: contact } = await supabase.from('crm_contacts').select('id').eq('wa_id', birthdayNumber).maybeSingle();
+      const { data: { user: bdayUser } } = await supabase.auth.getUser();
+      let { data: contact } = await supabase
+        .from('crm_contacts')
+        .select('id')
+        .eq('wa_id', birthdayNumber)
+        .eq('user_id', bdayUser?.id ?? '')
+        .maybeSingle();
       
       if (!contact) {
         const { data: newContact, error: createError } = await supabase.from('crm_contacts').insert({
           wa_id: birthdayNumber,
           name: birthdayName,
+          user_id: bdayUser?.id,
           status: 'new',
           source_type: 'system'
         }).select().single();
@@ -4270,18 +4284,21 @@ const CRM = () => {
       
       toast({ title: `Importando ${contacts_to_import.length} contatos...` });
 
+      const { data: { user: importUser } } = await supabase.auth.getUser();
+
       // Processamento em lotes maiores
       for (let i = 0; i < contacts_to_import.length; i += batchSize) {
         const batch = contacts_to_import.slice(i, i + batchSize).map(contact => ({
           wa_id: contact.wa_id,
           name: contact.name,
+          user_id: importUser?.id,
           status: contact.status || 'new',
           source_type: 'imported',
           metadata: contact.metadata || {},
           last_interaction: null
         }));
 
-        const { error } = await supabase.from('crm_contacts').upsert(batch, { onConflict: 'wa_id' });
+        const { error } = await supabase.from('crm_contacts').upsert(batch, { onConflict: 'wa_id,user_id' });
         if (!error) {
           successCount += batch.length;
           // Atualiza a lista periodicamente para feedback visual
