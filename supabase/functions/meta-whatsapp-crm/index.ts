@@ -3552,13 +3552,23 @@ function getGlobalWebhookVerifyToken() {
 async function ensureMetaAppWebhookConfigured() {
   const APP_ID = Deno.env.get('FACEBOOK_APP_ID');
   const APP_SECRET = Deno.env.get('FACEBOOK_APP_SECRET');
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-  if (!APP_ID || !APP_SECRET || !SUPABASE_URL) {
+  // Em self-hosted, SUPABASE_URL é interno (http://gateway:8000) e a Meta recusa
+  // com "(#100) Param callback_url is not a valid URI". Usa a URL pública.
+  const rawBaseUrl = Deno.env.get('PUBLIC_API_URL')
+    || Deno.env.get('PUBLIC_FUNCTIONS_URL')
+    || Deno.env.get('SUPABASE_URL');
+  if (!APP_ID || !APP_SECRET || !rawBaseUrl) {
     console.warn('[META WEBHOOK] Missing app credentials or backend URL');
     return { success: false, error: 'missing_config' };
   }
 
-  const callbackUrl = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/meta-whatsapp-crm`;
+  const baseUrl = rawBaseUrl.replace(/\/$/, '');
+  if (!/^https:\/\//i.test(baseUrl)) {
+    console.warn('[META WEBHOOK] Backend URL is not public HTTPS, skipping app subscription:', baseUrl);
+    return { success: false, error: 'non_public_callback_url' };
+  }
+
+  const callbackUrl = `${baseUrl}/functions/v1/meta-whatsapp-crm`;
   const form = new URLSearchParams();
   form.set('object', 'whatsapp_business_account');
   form.set('callback_url', callbackUrl);

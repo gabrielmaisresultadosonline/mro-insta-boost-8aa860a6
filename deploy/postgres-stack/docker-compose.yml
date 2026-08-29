@@ -171,6 +171,8 @@ services:
       start_period: 10s
     environment:
       SUPABASE_URL: ${INTERNAL_API_URL:-http://gateway:8000}
+      # URL pública usada em callbacks externos (webhook da Meta, OAuth, etc.).
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_DB_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-postgres}
