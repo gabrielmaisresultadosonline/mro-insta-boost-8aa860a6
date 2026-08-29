@@ -147,6 +147,46 @@ Buckets copiados: ${STORAGE_BUCKETS.map((b) => `\`${b.name}\` (${b.publicBucket 
 export default function MigrationExtras() {
   const [busy, setBusy] = useState<string | null>(null);
 
+  /**
+   * Exporta os valores reais dos secrets via edge function protegida por senha.
+   * Nada é armazenado no frontend — o conteúdo vai direto para download.
+   */
+  async function exportSecrets() {
+    const password = window.prompt(
+      "Senha de admin para liberar a exportação dos secrets:",
+    );
+    if (!password) return;
+
+    setBusy("secrets");
+    try {
+      const { data, error } = await supabase.functions.invoke<{
+        success?: boolean;
+        content?: string;
+        found?: string[];
+        missing?: string[];
+        error?: string;
+      }>("export-secrets", { body: { password } });
+
+      if (error) throw new Error(error.message);
+      if (!data?.success || !data.content) {
+        throw new Error(data?.error ?? "Falha ao exportar secrets");
+      }
+
+      download(data.content, "secrets.env", "text/plain;charset=utf-8");
+      toast.success(
+        `${data.found?.length ?? 0} secrets exportados${
+          data.missing?.length ? ` · ${data.missing.length} vazios` : ""
+        }`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao exportar secrets",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function exportFunctions() {
     setBusy("functions");
     try {
