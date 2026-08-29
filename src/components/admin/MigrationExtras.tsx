@@ -154,8 +154,13 @@ Buckets copiados: ${STORAGE_BUCKETS.map((b) => `\`${b.name}\` (${b.publicBucket 
 export default function MigrationExtras() {
   const [busy, setBusy] = useState<string | null>(null);
 
-  /** Gera o modelo seguro para preencher diretamente na VPS. */
+  /** Baixa o secrets.env já preenchido com os valores acessíveis no runtime. */
   async function exportSecrets() {
+    const adminEmail = window.prompt("E-mail administrativo:")?.trim();
+    if (!adminEmail) return;
+    const adminPassword = window.prompt("Senha administrativa:") ?? "";
+    if (!adminPassword) return;
+
     setBusy("secrets");
     try {
       const { data, error } = await supabase.functions.invoke<{
@@ -164,7 +169,7 @@ export default function MigrationExtras() {
         found?: string[];
         missing?: string[];
         error?: string;
-      }>("export-secrets", { body: {} });
+      }>("export-secrets", { body: { adminEmail, adminPassword } });
 
       if (error) throw new Error(error.message);
       if (!data?.success || !data.content) {
@@ -172,7 +177,9 @@ export default function MigrationExtras() {
       }
 
       download(data.content, "secrets.env", "text/plain;charset=utf-8");
-      toast.success(`Modelo gerado · ${data.missing?.length ?? 0} credenciais para preencher na VPS`);
+      toast.success(
+        `${data.found?.length ?? 0} preenchidos · ${data.missing?.length ?? 0} para completar na VPS`,
+      );
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Falha ao exportar secrets",
@@ -181,6 +188,7 @@ export default function MigrationExtras() {
       setBusy(null);
     }
   }
+
 
   async function exportFunctions() {
     setBusy("functions");
