@@ -143,6 +143,32 @@ const COMMON_CTWA_TRIGGER_TEXTS = [
   'Gostaria de saber sobre o sistema inovador!',
 ];
 
+/**
+ * Carrega um fluxo garantindo o isolamento por usuário.
+ * Fluxos legados migrados da base antiga podem estar com `user_id` NULL:
+ * nesse caso o fluxo é adotado (backfill) pelo usuário que o está executando,
+ * em vez de falhar com "no rows" (que virava HTTP 500 no front).
+ */
+async function loadFlowForUser(supabase: any, flowId: string, userId: string) {
+  const { data: flow, error } = await supabase
+    .from('crm_flows')
+    .select('*')
+    .eq('id', flowId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Falha ao carregar o fluxo: ${error.message}`);
+  if (!flow) throw new Error('Fluxo não encontrado');
+
+  if (!flow.user_id) {
+    await supabase.from('crm_flows').update({ user_id: userId }).eq('id', flowId).is('user_id', null);
+    flow.user_id = userId;
+  } else if (flow.user_id !== userId) {
+    throw new Error('Fluxo pertence a outra conta');
+  }
+
+  return flow;
+}
+
 async function getConfiguredCtwaFallbackText(supabase: any, userId?: string) {
   if (!userId) return '';
 
