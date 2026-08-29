@@ -131,10 +131,11 @@ services:
     image: supabase/storage-api:v1.19.3
     container_name: zapmro-storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5000/status"]
       interval: 5s
-      timeout: 3s
-      retries: 10
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
       db: { condition: service_healthy }
       rest: { condition: service_started }
