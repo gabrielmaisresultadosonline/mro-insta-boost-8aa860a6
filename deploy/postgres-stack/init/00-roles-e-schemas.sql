@@ -4,14 +4,6 @@
 -- =============================================================================
 \set pgpass `echo "$POSTGRES_PASSWORD"`
 
--- ---------------------------------------------------------------- extensões --
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp"  WITH SCHEMA extensions;
-CREATE EXTENSION IF NOT EXISTS pgcrypto     WITH SCHEMA extensions;
-CREATE EXTENSION IF NOT EXISTS pgjwt        WITH SCHEMA extensions;
-CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-CREATE EXTENSION IF NOT EXISTS pg_net       WITH SCHEMA extensions;
-
 -- ------------------------------------------------------------------- roles --
 DO $$
 BEGIN
@@ -44,6 +36,8 @@ END $$;
 
 GRANT anon, authenticated, service_role TO authenticator;
 GRANT ALL ON DATABASE postgres TO supabase_admin;
+GRANT ALL ON DATABASE postgres TO supabase_auth_admin;
+GRANT ALL ON DATABASE postgres TO supabase_storage_admin;
 
 -- ----------------------------------------------------------------- schemas --
 CREATE SCHEMA IF NOT EXISTS auth       AUTHORIZATION supabase_auth_admin;
@@ -52,6 +46,15 @@ CREATE SCHEMA IF NOT EXISTS realtime   AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS _realtime  AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION supabase_admin;
 CREATE SCHEMA IF NOT EXISTS graphql_public AUTHORIZATION supabase_admin;
+
+-- ---------------------------------------------------------------- extensões --
+-- Os schemas precisam existir antes de instalar extensões neles.
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp"  WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto     WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pgjwt        WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+CREATE EXTENSION IF NOT EXISTS pg_net       WITH SCHEMA extensions;
 
 GRANT USAGE ON SCHEMA public     TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;

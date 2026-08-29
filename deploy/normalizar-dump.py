@@ -263,6 +263,19 @@ def fix_array_values(text: str, array_columns: dict[str, set[str]]) -> str:
 
 
 # --------------------------------------------------------------------------
+# 5. cron deve chamar a stack local, nunca o backend antigo
+# --------------------------------------------------------------------------
+def fix_cron_urls(text: str, source_name: str) -> str:
+    if source_name != "090-cron.sql":
+        return text
+    return re.sub(
+        r"https://[a-z0-9-]+\.supabase\.co/functions/v1/",
+        "http://gateway:8000/functions/v1/",
+        text,
+    )
+
+
+# --------------------------------------------------------------------------
 def normalize(source: Path, destination: Path) -> None:
     text = source.read_text(encoding="utf-8")
     text = fix_column_types(text)
@@ -272,6 +285,7 @@ def normalize(source: Path, destination: Path) -> None:
     if not schema_path.exists():
         schema_path = SQL_DIR / SCHEMA_FILE
     text = fix_array_values(text, load_array_columns(schema_path))
+    text = fix_cron_urls(text, source.name)
 
     lines: list[str] = []
     for line in text.splitlines():
