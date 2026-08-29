@@ -60,6 +60,7 @@ BEGIN
   EXECUTE format('ALTER ROLE supabase_realtime_admin PASSWORD %L', p);
   EXECUTE 'ALTER ROLE supabase_admin SUPERUSER';
   EXECUTE 'ALTER ROLE supabase_auth_admin  CREATEROLE';
+  EXECUTE 'ALTER ROLE service_role BYPASSRLS';
   EXECUTE 'ALTER ROLE supabase_storage_admin CREATEROLE BYPASSRLS';
 END \$\$;
 
@@ -113,7 +114,9 @@ GRANT ALL ON ALL TABLES    IN SCHEMA auth    TO supabase_auth_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA auth    TO supabase_auth_admin;
 GRANT ALL ON ALL TABLES    IN SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
-GRANT SELECT ON ALL TABLES IN SCHEMA storage TO anon, authenticated, service_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA storage TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA storage TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA storage TO service_role;
 SQL
 ok "donos ajustados (auth → supabase_auth_admin, storage → supabase_storage_admin)"
 
@@ -227,6 +230,14 @@ GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_storage_admin IN SCHEMA storage
   GRANT ALL ON TABLES TO supabase_storage_admin;
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS service_role_all_objects ON storage.objects;
+CREATE POLICY service_role_all_objects ON storage.objects
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS service_role_all_buckets ON storage.buckets;
+CREATE POLICY service_role_all_buckets ON storage.buckets
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 SQL
 
 # ------------------------------------------------------- 4) reiniciar stack ---
