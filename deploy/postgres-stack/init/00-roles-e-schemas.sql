@@ -35,6 +35,9 @@ BEGIN
 END $$;
 
 GRANT anon, authenticated, service_role TO authenticator;
+-- Storage API muda para o papel contido no JWT durante cada requisição.
+-- Sem estas associações, até a service key termina sujeita às policies de RLS.
+GRANT anon, authenticated, service_role TO supabase_storage_admin;
 GRANT ALL ON DATABASE postgres TO supabase_admin;
 GRANT ALL ON DATABASE postgres TO supabase_auth_admin;
 GRANT ALL ON DATABASE postgres TO supabase_storage_admin;

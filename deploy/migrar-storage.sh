@@ -36,19 +36,37 @@ export LOCAL_SERVICE_KEY="${SERVICE_ROLE_KEY:?SERVICE_ROLE_KEY ausente no .env d
 export CONCURRENCY="${CONCURRENCY:-4}"   # baixo para não tomar 429 da nuvem
 export RETRIES="${RETRIES:-5}"
 
+sec "Corrigindo permissões administrativas do Storage"
+DB="postgresql://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${PG_PORT:-5432}/${POSTGRES_DB:-postgres}"
+command -v psql >/dev/null 2>&1 || die "psql não instalado"
+psql "$DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+GRANT anon, authenticated, service_role TO supabase_storage_admin;
+GRANT ALL ON SCHEMA storage TO supabase_storage_admin;
+GRANT ALL ON ALL TABLES IN SCHEMA storage TO supabase_storage_admin;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA storage TO supabase_storage_admin;
+SQL
+( cd "$STACK" && docker compose restart storage >/dev/null )
+ok "papéis anon/authenticated/service_role liberados para o Storage"
+
 sec "Esperando a stack local responder"
+storage_ready=0
 for i in $(seq 1 60); do
-  curl -sf -o /dev/null "$LOCAL_URL/storage/v1/bucket" -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY" && break
+  if curl -sf -o /dev/null "$LOCAL_URL/storage/v1/bucket" -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY"; then
+    storage_ready=1
+    break
+  fi
   sleep 2
 done
+[ "$storage_ready" = 1 ] || die "Storage não respondeu com a service key após 120 segundos"
 ok "storage local respondendo"
 
 sec "Copiando arquivos (nuvem → VPS)"
 node "$ROOT/deploy/postgres-stack/scripts/copiar-storage.mjs"
 
 sec "Conferência final"
-curl -s "$LOCAL_URL/storage/v1/bucket" \
+resultado="$(curl -fsS "$LOCAL_URL/storage/v1/bucket" \
   -H "Authorization: Bearer $LOCAL_SERVICE_KEY" -H "apikey: $LOCAL_SERVICE_KEY" \
-  | head -c 2000
-echo
+  | head -c 2000)"
+echo "$resultado"
+echo "$resultado" | grep -q '"name"' || die "nenhum bucket foi confirmado na stack local"
 ok "Migração do Storage finalizada."

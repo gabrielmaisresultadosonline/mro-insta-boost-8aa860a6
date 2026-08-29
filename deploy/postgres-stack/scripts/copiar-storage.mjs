@@ -143,10 +143,11 @@ async function pool(items, worker) {
 const { buckets } = await callFn({ action: "buckets" });
 console.log(`buckets na nuvem: ${buckets.map((b) => b.name).join(", ")}`);
 
-let totalOk = 0, totalFail = 0, totalSkip = 0;
+let totalOk = 0, totalFail = 0, totalSkip = 0, bucketFail = 0;
 for (const b of buckets) {
   const ready = await ensureBucket(b);
   if (!ready) {
+    bucketFail++;
     console.error(`✘ bucket ${b.name} não existe na stack local — pulando seus arquivos`);
     continue;
   }
@@ -184,3 +185,9 @@ for (const b of buckets) {
   console.log(`${b.name}: ${done - fail - skip} enviados, ${skip} já existiam, ${fail} falhas`);
 }
 console.log(`\nconcluído — ${totalOk} enviados, ${totalSkip} já existiam, ${totalFail} falhas`);
+
+if (bucketFail > 0 || totalFail > 0) {
+  throw new Error(
+    `migração incompleta: ${bucketFail} bucket(s) indisponível(is), ${totalFail} arquivo(s) com falha`,
+  );
+}

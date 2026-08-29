@@ -171,6 +171,7 @@ BEGIN
 END \$\$;
 
 GRANT anon, authenticated, service_role TO authenticator;
+GRANT anon, authenticated, service_role TO supabase_storage_admin;
 GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_admin;
 GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_auth_admin;
 GRANT ALL PRIVILEGES ON DATABASE ${POSTGRES_DB:-postgres} TO supabase_storage_admin;
