@@ -96,7 +96,8 @@ serve(async (req) => {
         .from('crm_templates')
         .select('*')
         .eq('id', tid)
-        .single()
+        .eq('user_id', ownerId)
+        .maybeSingle()
       
       if (!template) throw new Error('Template not found')
 
