@@ -265,6 +265,7 @@ ok "banco atualizado — ${aplicados} arquivo(s) aplicado(s), ${tabelas} tabelas
 info "reagendando cron das functions para a API local…"
 CRON_URL="${PUBLIC_API_URL:-http://gateway}/functions/v1/meta-whatsapp-crm"
 psql "$DB" -q -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.functions_url = '${PUBLIC_API_URL:-http://gateway}'" >/dev/null 2>&1 || true
+psql "$DB" -q -c "ALTER DATABASE ${POSTGRES_DB:-postgres} SET app.settings.service_role_key = '${SERVICE_ROLE_KEY}'" >/dev/null 2>&1 || true
 psql "$DB" -v ON_ERROR_STOP=0 -q >/tmp/zapmro-cron.log 2>&1 <<SQLCRON || true
 DO \$\$
 DECLARE j record;
@@ -279,27 +280,27 @@ END \$\$;
 SELECT cron.schedule('process-scheduled-flows-every-minute', '* * * * *', \$job\$
   SELECT net.http_post(
     url := '${CRON_URL}',
-    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${ANON_KEY}"}'::jsonb,
+    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${SERVICE_ROLE_KEY}"}'::jsonb,
     body := jsonb_build_object('action','processScheduled','source','cron','ts', now()),
-    timeout_milliseconds := 20000
+    timeout_milliseconds := 300000
   );
 \$job\$);
 
 SELECT cron.schedule('process-countdown-triggers', '*/2 * * * *', \$job\$
   SELECT net.http_post(
     url := '${CRON_URL}',
-    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${ANON_KEY}"}'::jsonb,
+    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${SERVICE_ROLE_KEY}"}'::jsonb,
     body := '{"action": "processCountdownTriggers"}'::jsonb,
-    timeout_milliseconds := 20000
+    timeout_milliseconds := 300000
   );
 \$job\$);
 
 SELECT cron.schedule('ai-recovery-every-10min', '*/10 * * * *', \$job\$
   SELECT net.http_post(
     url := '${CRON_URL}',
-    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${ANON_KEY}"}'::jsonb,
+    headers := '{"Content-Type":"application/json","apikey":"${ANON_KEY}","Authorization":"Bearer ${SERVICE_ROLE_KEY}"}'::jsonb,
     body := '{"action": "processAiRecovery"}'::jsonb,
-    timeout_milliseconds := 30000
+    timeout_milliseconds := 300000
   );
 \$job\$);
 SQLCRON
