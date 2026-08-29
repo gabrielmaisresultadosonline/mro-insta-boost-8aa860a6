@@ -97,12 +97,15 @@ Deno.serve(async (req) => {
 
     for (const name of EXPORTABLE) {
       const value = Deno.env.get(name);
-      if (value && value.length > 0) {
+      // Ambientes de preview injetam um placeholder no lugar do valor real.
+      const isPlaceholder = !value || value.includes("PLACEHOLDER_VALUE");
+
+      if (!isPlaceholder) {
         found.push(name);
-        lines.push(toEnvLine(name, value));
+        lines.push(toEnvLine(name, value!));
       } else {
         missing.push(name);
-        lines.push(`# ${name}= (não configurado neste ambiente)`);
+        lines.push(`# ${name}= (preencher manualmente — não disponível aqui)`);
       }
     }
 
