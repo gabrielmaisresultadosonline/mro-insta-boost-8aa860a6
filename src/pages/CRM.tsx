@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveMediaUrl } from "@/lib/mediaUrl";
 import { 
   MessageSquare, 
   Settings, 
@@ -6377,7 +6378,7 @@ const CRM = () => {
                                             <div className="max-h-[150px] aspect-video bg-muted/20 flex items-center justify-center relative overflow-hidden border-b border-border/10">
                                               {(() => {
                                                 const header = template.components.find((c: any) => c.type === 'HEADER');
-                                                let mediaUrl = m.media_url || header?.example?.header_handle?.[0];
+                                                let mediaUrl = resolveMediaUrl(m.media_url || header?.example?.header_handle?.[0]);
                                                 
                                                 const isNumericId = mediaUrl && /^\d+$/.test(mediaUrl.toString());
                                                 
@@ -6433,7 +6434,7 @@ const CRM = () => {
                                               {card.header && (card.header.format === 'IMAGE' || card.header.format === 'VIDEO') && (
                                                 <div className="h-[135px] bg-muted/20 flex items-center justify-center relative overflow-hidden border-b border-border/10">
                                                   {(() => {
-                                                    const mediaUrl = card.header.media_url || card.header.example?.header_handle?.[0] || card.header.image?.link || card.header.video?.link;
+                                                    const mediaUrl = resolveMediaUrl(card.header.media_url || card.header.example?.header_handle?.[0] || card.header.image?.link || card.header.video?.link);
                                                     if (card.header.format === 'IMAGE' && mediaUrl) {
                                                       return <img src={mediaUrl} alt="Card" className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewMedia({ url: mediaUrl, type: 'image' })} />;
                                                     } else if (card.header.format === 'VIDEO' && mediaUrl) {
@@ -6470,20 +6471,20 @@ const CRM = () => {
                                           {m.message_type === 'image' && m.media_url && !/^\d+$/.test(m.media_url.toString()) && (
                                             <div className="mb-2 overflow-hidden rounded-lg border border-border/20 shadow-sm bg-muted/20 max-w-fit">
                                               <img 
-                                                src={m.media_url} 
+                                                src={resolveMediaUrl(m.media_url)} 
                                                 alt="Mídia" 
                                                 className="max-h-[180px] w-auto object-cover cursor-zoom-in transition-transform hover:scale-[1.02] duration-300" 
-                                                onClick={() => setPreviewMedia({ url: m.media_url, type: 'image' })} 
+                                                onClick={() => setPreviewMedia({ url: resolveMediaUrl(m.media_url), type: 'image' })} 
                                               />
                                             </div>
                                           )}
                                           {m.message_type === 'sticker' && m.media_url && (
                                             <div className="mb-2 max-w-[150px]">
                                               <img 
-                                                src={m.media_url} 
+                                                src={resolveMediaUrl(m.media_url)} 
                                                 alt="Sticker" 
                                                 className="w-full h-auto cursor-zoom-in" 
-                                                onClick={() => setPreviewMedia({ url: m.media_url, type: 'image' })}
+                                                onClick={() => setPreviewMedia({ url: resolveMediaUrl(m.media_url), type: 'image' })}
                                               />
                                             </div>
                                           )}
@@ -6496,9 +6497,9 @@ const CRM = () => {
                                           {m.message_type === 'video' && m.media_url && (
                                             <div 
                                               className="mb-2 overflow-hidden rounded-lg border border-border/20 shadow-sm bg-muted/20 relative group cursor-pointer max-w-fit"
-                                              onClick={() => setPreviewMedia({ url: m.media_url, type: 'video' })}
+                                              onClick={() => setPreviewMedia({ url: resolveMediaUrl(m.media_url), type: 'video' })}
                                             >
-                                              <video src={m.media_url} className="max-h-[180px] w-auto object-cover rounded-lg shadow-inner" />
+                                              <video src={resolveMediaUrl(m.media_url)} className="max-h-[180px] w-auto object-cover rounded-lg shadow-inner" preload="metadata" />
                                               <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition-colors">
                                                 <Play className="w-10 h-10 text-white opacity-80 group-hover:opacity-100 transition-opacity" />
                                               </div>
@@ -6506,7 +6507,7 @@ const CRM = () => {
                                           )}
                                            {(m.message_type === 'audio' || m.message_type === 'voice') && m.media_url && (
                                              <div className="mb-1">
-                                               <WhatsAppAudioPlayer src={m.media_url} outbound={m.direction === 'outbound'} />
+                                               <WhatsAppAudioPlayer src={resolveMediaUrl(m.media_url)} outbound={m.direction === 'outbound'} />
                                               {m.direction === 'outbound' && m.status === 'failed' && !m.meta_message_id && (
                                                 <div className="mt-2 flex items-center justify-between gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30">
                                                   <div className="flex items-center gap-1.5 text-[10px] text-red-500 dark:text-red-300 font-medium">

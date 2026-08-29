@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { resolveMediaUrl } from "@/lib/mediaUrl";
 
 interface WhatsAppAudioPlayerProps {
   src: string;
@@ -30,6 +31,15 @@ export function WhatsAppAudioPlayer({ src, outbound = false }: WhatsAppAudioPlay
   const [current, setCurrent] = useState(0);
   const [rate, setRate] = useState<number>(GLOBAL_RATE);
   const [hasPlayed, setHasPlayed] = useState(false);
+  const [playbackError, setPlaybackError] = useState(false);
+  const playableSrc = resolveMediaUrl(src);
+
+  useEffect(() => {
+    setPlaybackError(false);
+    setPlaying(false);
+    setCurrent(0);
+    setDuration(0);
+  }, [playableSrc]);
 
   // Subscribe to global rate changes
   useEffect(() => {
@@ -39,7 +49,7 @@ export function WhatsAppAudioPlayer({ src, outbound = false }: WhatsAppAudioPlay
     };
     rateListeners.add(fn);
     return () => { rateListeners.delete(fn); };
-  }, []);
+  }, [playableSrc]);
 
   useEffect(() => {
     const a = audioRef.current;
@@ -60,11 +70,25 @@ export function WhatsAppAudioPlayer({ src, outbound = false }: WhatsAppAudioPlay
     };
   }, []);
 
-  const toggle = () => {
+  const toggle = async () => {
     const a = audioRef.current;
     if (!a) return;
-    if (a.paused) { a.playbackRate = GLOBAL_RATE; a.play(); setPlaying(true); setHasPlayed(true); }
-    else { a.pause(); setPlaying(false); }
+    if (a.paused) {
+      try {
+        setPlaybackError(false);
+        a.playbackRate = GLOBAL_RATE;
+        await a.play();
+        setPlaying(true);
+        setHasPlayed(true);
+      } catch (error) {
+        console.error("[CRM][audio] Falha ao reproduzir mídia", { src: playableSrc, error });
+        setPlaying(false);
+        setPlaybackError(true);
+      }
+    } else {
+      a.pause();
+      setPlaying(false);
+    }
   };
 
   const seek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -99,7 +123,7 @@ export function WhatsAppAudioPlayer({ src, outbound = false }: WhatsAppAudioPlay
     <div className={cn(
       "flex items-center gap-2 py-1.5 pl-1 pr-1.5 rounded-full w-full min-w-[180px] max-w-full sm:max-w-[320px]",
     )}>
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={playableSrc} preload="metadata" onError={() => setPlaybackError(true)} />
       <button
         type="button"
         onClick={toggle}
@@ -134,7 +158,7 @@ export function WhatsAppAudioPlayer({ src, outbound = false }: WhatsAppAudioPlay
           />
         </div>
         <div className="flex items-center justify-between text-[10px] font-medium opacity-70">
-          <span>{formatTime(playing || current > 0 ? current : duration)}</span>
+          <span>{playbackError ? "Áudio indisponível" : formatTime(playing || current > 0 ? current : duration)}</span>
         </div>
       </div>
 
