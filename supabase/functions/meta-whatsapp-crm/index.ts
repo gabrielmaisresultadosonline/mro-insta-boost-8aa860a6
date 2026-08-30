@@ -4,6 +4,19 @@ import { executeVisualNode, processStep } from "../_shared/flow-executor.ts"
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * O Storage roda atrás do gateway interno (http://gateway:8000), então
+ * getPublicUrl devolve um host que o navegador não resolve. Reescrevemos
+ * para o domínio público antes de gravar a URL no banco.
+ */
+function toPublicMediaUrl(url: string): string {
+  const publicBase = (Deno.env.get('PUBLIC_API_URL') || '').replace(/\/$/, '');
+  if (!publicBase || !url) return url;
+  const match = url.match(/\/storage\/v1\/object\/(?:public\/)?(.+)$/);
+  if (!match) return url;
+  return `${publicBase}/storage/v1/object/public/${match[1]}`;
+}
+
 function describeMessageForHistory(message: any) {
   const content = message.content || "";
   if (message.direction !== 'inbound') return content;
