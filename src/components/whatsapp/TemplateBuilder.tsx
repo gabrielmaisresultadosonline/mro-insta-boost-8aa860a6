@@ -31,8 +31,10 @@ import {
   Sparkles,
   Info,
   Check,
-  RefreshCw
+  RefreshCw,
+  Link2
 } from "lucide-react";
+import { createShortLink, isShortLink } from "@/lib/shortLink";
 import TemplatePreview from './TemplatePreview';
 import MetaPricingCalculator from './MetaPricingCalculator';
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +102,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
   const [bodyText, setBodyText] = useState('');
   const [footerText, setFooterText] = useState('');
   const [buttons, setButtons] = useState<any[]>([]);
+  const [shorteningKey, setShorteningKey] = useState<string | null>(null);
 
   // Utility Converter State
   const [utilityOpen, setUtilityOpen] = useState(false);
@@ -155,6 +158,36 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
       setCards(newCards);
     } else {
       setButtons(buttons.map((b, i) => i === index ? { ...b, ...updates } : b));
+    }
+  };
+
+  /**
+   * Encurtador opcional: converte a URL do botão num link do próprio domínio.
+   * Útil para links que a Meta bloqueia (wa.me / api.whatsapp.com).
+   */
+  const shortenButtonUrl = async (index: number, cardIndex?: number) => {
+    const current = cardIndex !== undefined ? cards[cardIndex].buttons[index] : buttons[index];
+    const url = String(current?.url || '').trim();
+
+    if (!/^https?:\/\//i.test(url)) {
+      toast({ title: "URL inválida", description: "Cole o link completo (https://…) antes de encurtar.", variant: "destructive" });
+      return;
+    }
+    if (isShortLink(url)) {
+      toast({ title: "Já encurtado", description: "Este botão já usa um link do seu domínio." });
+      return;
+    }
+
+    const key = `${cardIndex ?? 'std'}-${index}`;
+    setShorteningKey(key);
+    try {
+      const { shortUrl } = await createShortLink(url);
+      updateButton(index, { url: shortUrl }, cardIndex);
+      toast({ title: "Link encurtado", description: shortUrl });
+    } catch (error: any) {
+      toast({ title: "Erro ao encurtar", description: error?.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setShorteningKey(null);
     }
   };
 
@@ -579,7 +612,28 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
                     <div key={idx} className="flex gap-2 items-start bg-muted/30 p-2 rounded-lg border">
                       <div className="flex-1 space-y-2">
                         <Input placeholder="Texto" value={btn.text} onChange={e => updateButton(idx, { text: e.target.value })} maxLength={25} />
-                        {btn.type === 'URL' && <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value })} />}
+                        {btn.type === 'URL' && (
+                          <div className="space-y-1">
+                            <div className="flex gap-2">
+                              <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value })} />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="shrink-0"
+                                disabled={shorteningKey === `std-${idx}`}
+                                onClick={() => shortenButtonUrl(idx)}
+                              >
+                                {shorteningKey === `std-${idx}`
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <><Link2 className="w-3 h-3 mr-1" /> Encurtar</>}
+                              </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              Opcional: gera um link do seu domínio (ex.: /l/ab12cd) — permite usar destinos que a Meta bloqueia, como wa.me.
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => removeButton(idx)} className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
                     </div>
@@ -685,7 +739,23 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
                           <div key={idx} className="flex gap-1 items-start bg-background p-2 rounded-md border text-xs">
                             <div className="flex-1 space-y-1">
                               <Input placeholder="Texto" value={btn.text} onChange={e => updateButton(idx, { text: e.target.value }, activeCardIndex)} maxLength={25} className="h-7 text-[10px]" />
-                              {btn.type === 'URL' && <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value }, activeCardIndex)} className="h-7 text-[10px]" />}
+                              {btn.type === 'URL' && (
+                                <div className="flex gap-1">
+                                  <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value }, activeCardIndex)} className="h-7 text-[10px]" />
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-7 text-[10px] shrink-0"
+                                    disabled={shorteningKey === `${activeCardIndex}-${idx}`}
+                                    onClick={() => shortenButtonUrl(idx, activeCardIndex)}
+                                  >
+                                    {shorteningKey === `${activeCardIndex}-${idx}`
+                                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                                      : <><Link2 className="w-3 h-3 mr-1" /> Encurtar</>}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                             <Button variant="ghost" size="icon" onClick={() => removeButton(idx, activeCardIndex)} className="h-7 w-7 text-destructive"><Trash2 className="w-3 h-3" /></Button>
                           </div>
