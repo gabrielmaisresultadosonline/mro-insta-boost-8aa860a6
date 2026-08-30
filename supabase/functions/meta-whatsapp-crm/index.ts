@@ -2902,6 +2902,7 @@ async function fetchMediaWithFallback(url: string) {
 
   if (response?.ok) return response;
 
+
   const storageMatch = url.match(/\/storage\/v1\/object\/(?:public\/)?(.+)$/);
   const localBase = (Deno.env.get('PUBLIC_API_URL') || Deno.env.get('SUPABASE_URL') || '').replace(/\/$/, '');
   if (storageMatch && localBase && !url.startsWith(localBase)) {
