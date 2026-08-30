@@ -56,6 +56,26 @@ const hasSequentialTemplateVariables = (value: string) => {
   return indexes.every((index, position) => index === position + 1);
 };
 
+/**
+ * A Meta rejeita botões de URL que apontem direto para o WhatsApp
+ * ("Direct links to WhatsApp aren't allowed for buttons").
+ * Bloqueamos antes do envio para evitar reprovação do template.
+ */
+const WHATSAPP_LINK_PATTERN = /^(https?:\/\/)?([a-z0-9-]+\.)*(wa\.me|whatsapp\.com|wa\.link|whatsapp\.net|api\.whatsapp\.com|chat\.whatsapp\.com)(\/|$|\?)/i;
+
+const isWhatsAppDirectLink = (value: string) => {
+  const url = String(value || '').trim();
+  if (!url) return false;
+  if (WHATSAPP_LINK_PATTERN.test(url)) return true;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return /(^|\.)(wa\.me|whatsapp\.com|wa\.link|whatsapp\.net)$/.test(host);
+  } catch {
+    return false;
+  }
+};
+
+
 const getButtonPayload = (button: any) => {
   const payload: any = { type: button.type, text: String(button.text || '').trim() };
   if (button.type === 'URL') {
@@ -278,6 +298,31 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
       return;
     }
 
+    if (templateType === 'STANDARD' && buttons.some(button => button.type === 'URL' && isWhatsAppDirectLink(String(button.url || '')))) {
+      toast({
+        title: "Link do WhatsApp não permitido",
+        description: "A Meta bloqueia botões que apontam para wa.me / api.whatsapp.com. Use um link do seu site ou troque por um botão de Resposta Rápida.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && buttons.filter(button => button.type === 'URL').length > 2) {
+      toast({ title: "Botões de link em excesso", description: "A Meta permite no máximo 2 botões de URL por template.", variant: "destructive" });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && buttons.filter(button => button.type === 'PHONE_NUMBER' || button.type === 'PHONE').length > 1) {
+      toast({ title: "Botões de telefone em excesso", description: "A Meta permite no máximo 1 botão de telefone por template.", variant: "destructive" });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && buttons.length > 10) {
+      toast({ title: "Botões em excesso", description: "A Meta permite no máximo 10 botões por template.", variant: "destructive" });
+      return;
+    }
+
+
     if (templateType === 'STANDARD' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && !headerUrl.trim()) {
       toast({
         title: "Mídia obrigatória",
@@ -314,6 +359,21 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
         setActiveCardIndex(invalidCardIndex);
         return;
       }
+
+      const whatsappLinkCardIndex = cards.findIndex(card =>
+        card.buttons.some((button: any) => button.type === 'URL' && isWhatsAppDirectLink(String(button.url || '')))
+      );
+      if (whatsappLinkCardIndex >= 0) {
+        toast({
+          title: "Link do WhatsApp não permitido",
+          description: `O Cartão ${whatsappLinkCardIndex + 1} usa um link direto do WhatsApp (wa.me). A Meta não aprova esse tipo de botão.`,
+          variant: "destructive",
+        });
+        setActiveCardIndex(whatsappLinkCardIndex);
+        return;
+      }
+
+
 
       const expectedHeaderType = cards[0].headerType;
       if (cards.some(card => card.headerType !== expectedHeaderType)) {
