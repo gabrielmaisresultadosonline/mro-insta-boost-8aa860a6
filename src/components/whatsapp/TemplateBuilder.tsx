@@ -159,6 +159,36 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
     }
   };
 
+  /**
+   * Encurtador opcional: converte a URL do botão num link do próprio domínio.
+   * Útil para links que a Meta bloqueia (wa.me / api.whatsapp.com).
+   */
+  const shortenButtonUrl = async (index: number, cardIndex?: number) => {
+    const current = cardIndex !== undefined ? cards[cardIndex].buttons[index] : buttons[index];
+    const url = String(current?.url || '').trim();
+
+    if (!/^https?:\/\//i.test(url)) {
+      toast({ title: "URL inválida", description: "Cole o link completo (https://…) antes de encurtar.", variant: "destructive" });
+      return;
+    }
+    if (isShortLink(url)) {
+      toast({ title: "Já encurtado", description: "Este botão já usa um link do seu domínio." });
+      return;
+    }
+
+    const key = `${cardIndex ?? 'std'}-${index}`;
+    setShorteningKey(key);
+    try {
+      const { shortUrl } = await createShortLink(url);
+      updateButton(index, { url: shortUrl }, cardIndex);
+      toast({ title: "Link encurtado", description: shortUrl });
+    } catch (error: any) {
+      toast({ title: "Erro ao encurtar", description: error?.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setShorteningKey(null);
+    }
+  };
+
   const addCard = () => {
     if (cards.length >= 10) return;
     setCards([...cards, { id: Date.now().toString(), headerType: 'IMAGE', headerUrl: '', bodyText: '', buttons: [] }]);
