@@ -99,16 +99,28 @@ function validateTemplateForMeta(name: unknown, category: unknown, language: unk
       throw new Error('O rodapé não pode conter variáveis.');
     }
     if (component?.type === 'BUTTONS') {
-      for (const button of component.buttons || []) {
+      const buttons = component.buttons || [];
+      if (buttons.length > 10) throw new Error('A Meta permite no máximo 10 botões por template.');
+      if (buttons.filter((button: any) => button?.type === 'URL').length > 2) {
+        throw new Error('A Meta permite no máximo 2 botões de URL por template.');
+      }
+      if (buttons.filter((button: any) => button?.type === 'PHONE_NUMBER' || button?.type === 'PHONE').length > 1) {
+        throw new Error('A Meta permite no máximo 1 botão de telefone por template.');
+      }
+      for (const button of buttons) {
         if (!firstNonEmptyString(button?.text)) throw new Error('Preencha o texto de todos os botões.');
         if (button?.type === 'URL' && !/^https?:\/\//i.test(firstNonEmptyString(button?.url))) {
           throw new Error('Todo botão de link precisa de uma URL completa iniciando com https://.');
+        }
+        if (button?.type === 'URL' && isWhatsAppDirectLink(button?.url)) {
+          throw new Error('A Meta não aprova botões com link direto para o WhatsApp (wa.me, api.whatsapp.com, chat.whatsapp.com). Use o link do seu site ou um botão de Resposta Rápida.');
         }
         if (button?.type === 'URL' && /\{\{\d+\}\}/.test(String(button?.url || '')) && !Array.isArray(button?.example)) {
           throw new Error('Botões com link dinâmico precisam de um exemplo válido para a variável da URL.');
         }
       }
     }
+
     if (component?.type === 'CAROUSEL') {
       if (!Array.isArray(component.cards) || component.cards.length < 2) {
         throw new Error('O carrossel precisa ter pelo menos 2 cartões.');
