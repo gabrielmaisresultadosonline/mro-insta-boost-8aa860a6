@@ -33,6 +33,7 @@ import {
   Check,
   RefreshCw
 } from "lucide-react";
+import { createShortLink, isShortLink } from "@/lib/shortLink";
 import TemplatePreview from './TemplatePreview';
 import MetaPricingCalculator from './MetaPricingCalculator';
 import { Badge } from "@/components/ui/badge";
