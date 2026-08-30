@@ -16,10 +16,18 @@ export function resolveMediaUrl(value: unknown): string {
   try {
     const parsed = new URL(url);
     const currentOrigin = new URL(currentBase).origin;
-    const match = parsed.pathname.match(PUBLIC_STORAGE_OBJECT_PATH);
-    const isKnownStorageHost = parsed.hostname.endsWith(".supabase.co") || parsed.origin === currentOrigin;
+    if (parsed.origin === currentOrigin) return url;
 
-    if (!match?.[1] || !isKnownStorageHost || parsed.origin === currentOrigin) return url;
+    const match = parsed.pathname.match(PUBLIC_STORAGE_OBJECT_PATH);
+    if (!match?.[1]) return url;
+
+    // Hosts internos (gateway:8000) ou do Storage antigo (*.supabase.co)
+    // precisam apontar para o domínio público atual.
+    const isRemappable =
+      parsed.hostname.endsWith(".supabase.co") ||
+      !parsed.hostname.includes(".");
+
+    if (!isRemappable) return url;
     return `${currentBase}/storage/v1/object/public/${match[1]}${parsed.search}`;
   } catch {
     return url;
