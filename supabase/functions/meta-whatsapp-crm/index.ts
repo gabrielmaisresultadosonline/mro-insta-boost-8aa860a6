@@ -76,8 +76,24 @@ function validateTemplateForMeta(name: unknown, category: unknown, language: unk
   if (String(body.text).length > 1024) throw new Error('O corpo da mensagem excede o limite de 1.024 caracteres da Meta.');
 
   for (const component of components) {
+    const getVariableIndexes = (value: unknown) =>
+      Array.from(new Set(Array.from(String(value || '').matchAll(/\{\{(\d+)\}\}/g), (match) => Number(match[1])))).sort((a, b) => a - b);
+    const assertSequentialVariables = (value: unknown, label: string) => {
+      const indexes = getVariableIndexes(value);
+      if (!indexes.every((index, position) => index === position + 1)) {
+        throw new Error(`${label} usa variáveis fora de sequência. Use {{1}}, {{2}}, {{3}} sem pular números.`);
+      }
+    };
+
+    if (component?.type === 'BODY') assertSequentialVariables(component?.text, 'O corpo da mensagem');
     if (component?.type === 'HEADER' && component?.format === 'TEXT' && !firstNonEmptyString(component?.text)) {
       throw new Error('Preencha o texto do cabeçalho ou selecione “Nenhum”.');
+    }
+    if (component?.type === 'HEADER' && component?.format === 'TEXT') {
+      const indexes = getVariableIndexes(component?.text);
+      if (indexes.length > 1 || (indexes.length === 1 && indexes[0] !== 1)) {
+        throw new Error('O cabeçalho aceita somente a variável {{1}}.');
+      }
     }
     if (component?.type === 'FOOTER' && /\{\{\d+\}\}/.test(String(component?.text || ''))) {
       throw new Error('O rodapé não pode conter variáveis.');
@@ -88,6 +104,9 @@ function validateTemplateForMeta(name: unknown, category: unknown, language: unk
         if (button?.type === 'URL' && !/^https?:\/\//i.test(firstNonEmptyString(button?.url))) {
           throw new Error('Todo botão de link precisa de uma URL completa iniciando com https://.');
         }
+        if (button?.type === 'URL' && /\{\{\d+\}\}/.test(String(button?.url || '')) && !Array.isArray(button?.example)) {
+          throw new Error('Botões com link dinâmico precisam de um exemplo válido para a variável da URL.');
+        }
       }
     }
     if (component?.type === 'CAROUSEL') {
@@ -96,10 +115,13 @@ function validateTemplateForMeta(name: unknown, category: unknown, language: unk
       }
       const firstButtons = component.cards[0]?.components?.find((item: any) => item?.type === 'BUTTONS')?.buttons || [];
       const expectedTypes = firstButtons.map((button: any) => button?.type).join(',');
+      const expectedHeaderFormat = component.cards[0]?.components?.find((item: any) => item?.type === 'HEADER')?.format;
       for (const [index, card] of component.cards.entries()) {
+        const cardHeader = card?.components?.find((item: any) => item?.type === 'HEADER');
         const cardBody = card?.components?.find((item: any) => item?.type === 'BODY');
         const cardButtons = card?.components?.find((item: any) => item?.type === 'BUTTONS')?.buttons || [];
         if (!firstNonEmptyString(cardBody?.text)) throw new Error(`Preencha o texto do cartão ${index + 1}.`);
+        if (cardHeader?.format !== expectedHeaderFormat) throw new Error('Todos os cartões do carrossel precisam usar o mesmo tipo de mídia.');
         if (cardButtons.map((button: any) => button?.type).join(',') !== expectedTypes) {
           throw new Error('Todos os cartões do carrossel precisam ter os mesmos tipos de botão, na mesma ordem.');
         }
@@ -3851,7 +3873,7 @@ async function getMetaHeaderHandle(accessToken: string, appId: string, mediaUrl:
 
     if (!uploadSessionId) {
       console.error('Failed to initialize Meta upload session:', JSON.stringify(initData));
-      throw new Error("Failed to initialize Meta upload session");
+      throw new Error(getMetaTemplateErrorMessage(initData));
     }
 
     // 3. Upload the actual data
@@ -3868,14 +3890,14 @@ async function getMetaHeaderHandle(accessToken: string, appId: string, mediaUrl:
     const uploadData = await uploadRes.json();
     if (!uploadData.h) {
       console.error('Failed to get handle from upload:', JSON.stringify(uploadData));
-      return null;
+      throw new Error(getMetaTemplateErrorMessage(uploadData));
     }
     
     console.log(`Successfully generated Meta handle: ${uploadData.h}`);
     return uploadData.h;
   } catch (err) {
     console.error('Error in getMetaHeaderHandle:', err);
-    return null;
+    throw err;
   }
 }
 

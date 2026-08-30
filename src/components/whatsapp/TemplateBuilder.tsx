@@ -48,6 +48,24 @@ interface TemplateBuilderProps {
   isSaving?: boolean;
 }
 
+const getTemplateVariableIndexes = (value: string) =>
+  Array.from(new Set(Array.from(value.matchAll(/\{\{(\d+)\}\}/g), match => Number(match[1])))).sort((a, b) => a - b);
+
+const hasSequentialTemplateVariables = (value: string) => {
+  const indexes = getTemplateVariableIndexes(value);
+  return indexes.every((index, position) => index === position + 1);
+};
+
+const getButtonPayload = (button: any) => {
+  const payload: any = { type: button.type, text: String(button.text || '').trim() };
+  if (button.type === 'URL') {
+    payload.url = String(button.url || '').trim();
+    if (/\{\{1\}\}/.test(payload.url)) payload.example = [payload.url.replace(/\{\{1\}\}/g, 'exemplo')];
+  }
+  if (button.type === 'PHONE') payload.phone_number = String(button.phone_number || '').trim();
+  return payload;
+};
+
 const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) => {
   const { toast } = useToast();
   const [templateType, setTemplateType] = useState<'STANDARD' | 'CAROUSEL'>('STANDARD');
@@ -243,6 +261,17 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
       return;
     }
 
+    const headerVariables = getTemplateVariableIndexes(headerText);
+    if (templateType === 'STANDARD' && headerType === 'TEXT' && (headerVariables.length > 1 || (headerVariables.length === 1 && headerVariables[0] !== 1))) {
+      toast({ title: "Variável inválida no cabeçalho", description: "O cabeçalho aceita somente a variável {{1}}.", variant: "destructive" });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && !hasSequentialTemplateVariables(bodyText)) {
+      toast({ title: "Variáveis fora de sequência", description: "Use {{1}}, {{2}}, {{3}} em ordem, sem pular números.", variant: "destructive" });
+      return;
+    }
+
     const invalidButton = buttons.find(button => !String(button.text || '').trim() || (button.type === 'URL' && !/^https?:\/\//i.test(String(button.url || '').trim())));
     if (templateType === 'STANDARD' && invalidButton) {
       toast({ title: "Botão incompleto", description: "Preencha o texto e use uma URL completa iniciando com https://.", variant: "destructive" });
@@ -285,6 +314,12 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
         setActiveCardIndex(invalidCardIndex);
         return;
       }
+
+      const expectedHeaderType = cards[0].headerType;
+      if (cards.some(card => card.headerType !== expectedHeaderType)) {
+        toast({ title: "Mídias incompatíveis", description: "Todos os cartões precisam usar o mesmo tipo de mídia: somente imagens ou somente vídeos.", variant: "destructive" });
+        return;
+      }
     }
 
     const components: any[] = [];
@@ -316,12 +351,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
       if (buttons.length > 0) {
         components.push({
           type: 'BUTTONS',
-          buttons: buttons.map(b => {
-            const btn: any = { type: b.type, text: b.text };
-            if (b.type === 'URL') btn.url = b.url || "https://example.com";
-            if (b.type === 'PHONE') btn.phone_number = b.phone_number || "5511999999999";
-            return btn;
-          })
+            buttons: buttons.map(getButtonPayload)
         });
       }
     } else {
@@ -349,12 +379,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
           if (card.buttons.length > 0) {
             cardComponents.push({
               type: 'BUTTONS',
-              buttons: card.buttons.map((b: any) => {
-                const btn: any = { type: b.type, text: b.text };
-                if (b.type === 'URL') btn.url = b.url || "https://example.com";
-                if (b.type === 'PHONE') btn.phone_number = b.phone_number || "5511999999999";
-                return btn;
-              })
+              buttons: card.buttons.map(getButtonPayload)
             });
           }
 
