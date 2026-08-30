@@ -7747,6 +7747,10 @@ const CRM = () => {
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-6xl w-[95vw] md:w-full h-[90vh] p-0 border-none rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl">
+                          <DialogHeader className="sr-only">
+                            <DialogTitle>Criar template do WhatsApp</DialogTitle>
+                            <DialogDescription>Configure e envie um novo template para aprovação da Meta.</DialogDescription>
+                          </DialogHeader>
                           <ScrollArea className="h-full">
                             <TemplateBuilder onSave={handleSaveTemplate} isSaving={saving} />
                           </ScrollArea>
