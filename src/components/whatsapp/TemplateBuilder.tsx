@@ -101,6 +101,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
   const [bodyText, setBodyText] = useState('');
   const [footerText, setFooterText] = useState('');
   const [buttons, setButtons] = useState<any[]>([]);
+  const [shorteningKey, setShorteningKey] = useState<string | null>(null);
 
   // Utility Converter State
   const [utilityOpen, setUtilityOpen] = useState(false);
