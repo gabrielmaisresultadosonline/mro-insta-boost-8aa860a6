@@ -31,7 +31,8 @@ import {
   Sparkles,
   Info,
   Check,
-  RefreshCw
+  RefreshCw,
+  Link2
 } from "lucide-react";
 import { createShortLink, isShortLink } from "@/lib/shortLink";
 import TemplatePreview from './TemplatePreview';
