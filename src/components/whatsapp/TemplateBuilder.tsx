@@ -738,7 +738,23 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
                           <div key={idx} className="flex gap-1 items-start bg-background p-2 rounded-md border text-xs">
                             <div className="flex-1 space-y-1">
                               <Input placeholder="Texto" value={btn.text} onChange={e => updateButton(idx, { text: e.target.value }, activeCardIndex)} maxLength={25} className="h-7 text-[10px]" />
-                              {btn.type === 'URL' && <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value }, activeCardIndex)} className="h-7 text-[10px]" />}
+                              {btn.type === 'URL' && (
+                                <div className="flex gap-1">
+                                  <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value }, activeCardIndex)} className="h-7 text-[10px]" />
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-7 text-[10px] shrink-0"
+                                    disabled={shorteningKey === `${activeCardIndex}-${idx}`}
+                                    onClick={() => shortenButtonUrl(idx, activeCardIndex)}
+                                  >
+                                    {shorteningKey === `${activeCardIndex}-${idx}`
+                                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                                      : <><Link2 className="w-3 h-3 mr-1" /> Encurtar</>}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                             <Button variant="ghost" size="icon" onClick={() => removeButton(idx, activeCardIndex)} className="h-7 w-7 text-destructive"><Trash2 className="w-3 h-3" /></Button>
                           </div>
