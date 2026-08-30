@@ -298,6 +298,31 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
       return;
     }
 
+    if (templateType === 'STANDARD' && buttons.some(button => button.type === 'URL' && isWhatsAppDirectLink(String(button.url || '')))) {
+      toast({
+        title: "Link do WhatsApp não permitido",
+        description: "A Meta bloqueia botões que apontam para wa.me / api.whatsapp.com. Use um link do seu site ou troque por um botão de Resposta Rápida.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && buttons.filter(button => button.type === 'URL').length > 2) {
+      toast({ title: "Botões de link em excesso", description: "A Meta permite no máximo 2 botões de URL por template.", variant: "destructive" });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && buttons.filter(button => button.type === 'PHONE_NUMBER' || button.type === 'PHONE').length > 1) {
+      toast({ title: "Botões de telefone em excesso", description: "A Meta permite no máximo 1 botão de telefone por template.", variant: "destructive" });
+      return;
+    }
+
+    if (templateType === 'STANDARD' && buttons.length > 10) {
+      toast({ title: "Botões em excesso", description: "A Meta permite no máximo 10 botões por template.", variant: "destructive" });
+      return;
+    }
+
+
     if (templateType === 'STANDARD' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && !headerUrl.trim()) {
       toast({
         title: "Mídia obrigatória",
