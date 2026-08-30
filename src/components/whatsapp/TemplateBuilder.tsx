@@ -360,6 +360,21 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
         return;
       }
 
+      const whatsappLinkCardIndex = cards.findIndex(card =>
+        card.buttons.some((button: any) => button.type === 'URL' && isWhatsAppDirectLink(String(button.url || '')))
+      );
+      if (whatsappLinkCardIndex >= 0) {
+        toast({
+          title: "Link do WhatsApp não permitido",
+          description: `O Cartão ${whatsappLinkCardIndex + 1} usa um link direto do WhatsApp (wa.me). A Meta não aprova esse tipo de botão.`,
+          variant: "destructive",
+        });
+        setActiveCardIndex(whatsappLinkCardIndex);
+        return;
+      }
+
+
+
       const expectedHeaderType = cards[0].headerType;
       if (cards.some(card => card.headerType !== expectedHeaderType)) {
         toast({ title: "Mídias incompatíveis", description: "Todos os cartões precisam usar o mesmo tipo de mídia: somente imagens ou somente vídeos.", variant: "destructive" });
