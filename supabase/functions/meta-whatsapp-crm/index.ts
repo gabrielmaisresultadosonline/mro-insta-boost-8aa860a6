@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.0"
 import { executeVisualNode, processStep } from "../_shared/flow-executor.ts"
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const META_GRAPH_API_VERSION = 'v25.0';
 
 /**
  * O Storage roda atrás do gateway interno (http://gateway:8000), então
@@ -42,6 +43,69 @@ function firstNonEmptyString(...values: unknown[]) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+}
+
+function getMetaTemplateErrorMessage(result: any) {
+  const error = result?.error || {};
+  const detail = firstNonEmptyString(
+    error?.error_user_msg,
+    error?.error_data?.details,
+    error?.error_user_title,
+    error?.message,
+  );
+  const trace = firstNonEmptyString(error?.fbtrace_id);
+  return trace && detail ? `${detail} (Meta: ${trace})` : detail || 'A Meta recusou os parâmetros do template.';
+}
+
+function validateTemplateForMeta(name: unknown, category: unknown, language: unknown, components: unknown) {
+  const templateName = firstNonEmptyString(name);
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
+    throw new Error('O nome do template deve conter apenas letras minúsculas, números e underline.');
+  }
+
+  const normalizedCategory = firstNonEmptyString(category).toUpperCase();
+  if (!['MARKETING', 'UTILITY'].includes(normalizedCategory)) {
+    throw new Error('Este editor aceita templates Marketing ou Utility. Templates de autenticação exigem o formato OTP da Meta.');
+  }
+
+  if (!firstNonEmptyString(language)) throw new Error('Selecione o idioma do template.');
+  if (!Array.isArray(components)) throw new Error('Os componentes do template são inválidos.');
+
+  const body = components.find((component: any) => component?.type === 'BODY');
+  if (!firstNonEmptyString(body?.text)) throw new Error('O corpo da mensagem é obrigatório.');
+  if (String(body.text).length > 1024) throw new Error('O corpo da mensagem excede o limite de 1.024 caracteres da Meta.');
+
+  for (const component of components) {
+    if (component?.type === 'HEADER' && component?.format === 'TEXT' && !firstNonEmptyString(component?.text)) {
+      throw new Error('Preencha o texto do cabeçalho ou selecione “Nenhum”.');
+    }
+    if (component?.type === 'FOOTER' && /\{\{\d+\}\}/.test(String(component?.text || ''))) {
+      throw new Error('O rodapé não pode conter variáveis.');
+    }
+    if (component?.type === 'BUTTONS') {
+      for (const button of component.buttons || []) {
+        if (!firstNonEmptyString(button?.text)) throw new Error('Preencha o texto de todos os botões.');
+        if (button?.type === 'URL' && !/^https?:\/\//i.test(firstNonEmptyString(button?.url))) {
+          throw new Error('Todo botão de link precisa de uma URL completa iniciando com https://.');
+        }
+      }
+    }
+    if (component?.type === 'CAROUSEL') {
+      if (!Array.isArray(component.cards) || component.cards.length < 2) {
+        throw new Error('O carrossel precisa ter pelo menos 2 cartões.');
+      }
+      const firstButtons = component.cards[0]?.components?.find((item: any) => item?.type === 'BUTTONS')?.buttons || [];
+      const expectedTypes = firstButtons.map((button: any) => button?.type).join(',');
+      for (const [index, card] of component.cards.entries()) {
+        const cardBody = card?.components?.find((item: any) => item?.type === 'BODY');
+        const cardButtons = card?.components?.find((item: any) => item?.type === 'BUTTONS')?.buttons || [];
+        if (!firstNonEmptyString(cardBody?.text)) throw new Error(`Preencha o texto do cartão ${index + 1}.`);
+        if (cardButtons.map((button: any) => button?.type).join(',') !== expectedTypes) {
+          throw new Error('Todos os cartões do carrossel precisam ter os mesmos tipos de botão, na mesma ordem.');
+        }
+      }
+    }
+  }
 }
 
 function normalizeTriggerText(value: unknown) {
@@ -3773,7 +3837,7 @@ async function getMetaHeaderHandle(accessToken: string, appId: string, mediaUrl:
 
     // 2. Initialize upload
     console.log(`Initializing resumable upload for ${fileName} ${fileType} (${fileSize} bytes)...`);
-    const initUrl = new URL(`https://graph.facebook.com/v20.0/${appId}/uploads`);
+    const initUrl = new URL(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${appId}/uploads`);
     initUrl.searchParams.set('file_name', fileName);
     initUrl.searchParams.set('file_length', String(fileSize));
     initUrl.searchParams.set('file_type', fileType);
@@ -3792,7 +3856,7 @@ async function getMetaHeaderHandle(accessToken: string, appId: string, mediaUrl:
 
     // 3. Upload the actual data
     console.log(`Uploading file data to session ${uploadSessionId}...`);
-    const uploadRes = await fetch(`https://graph.facebook.com/v20.0/${uploadSessionId}`, {
+    const uploadRes = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${uploadSessionId}`, {
       method: 'POST',
       headers: {
         'Authorization': `OAuth ${accessToken}`,
@@ -4536,7 +4600,7 @@ async function fetchAndStoreIncomingMedia(
       while (retryCount < maxRetries) {
         try {
           const response = await fetch(
-            `https://graph.facebook.com/v20.0/${meta_waba_id}/message_templates?limit=500`, // Reduced limit to be safer
+            `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${meta_waba_id}/message_templates?limit=500`, // Reduced limit to be safer
             {
               headers: { 'Authorization': `Bearer ${meta_access_token}` },
             }
@@ -4663,6 +4727,7 @@ async function fetchAndStoreIncomingMedia(
       }
 
       const requestedCategory = firstNonEmptyString(category).toUpperCase();
+      validateTemplateForMeta(name, requestedCategory, language, components);
       console.log('[TEMPLATE-CATEGORY-CREATE-REQUEST]', {
         template_name: name,
         requested_category: requestedCategory,
@@ -4754,7 +4819,7 @@ async function fetchAndStoreIncomingMedia(
       });
 
       let response = await fetch(
-        `https://graph.facebook.com/v20.0/${meta_waba_id}/message_templates`,
+        `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${meta_waba_id}/message_templates`,
         {
           method: 'POST',
           headers: {
@@ -4775,7 +4840,7 @@ async function fetchAndStoreIncomingMedia(
         console.warn('[TEMPLATE-RETRY-LANG-DELETING]', { original: name, retryName });
         const retryPayload = { ...createTemplatePayload, name: retryName };
         response = await fetch(
-          `https://graph.facebook.com/v20.0/${meta_waba_id}/message_templates`,
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${meta_waba_id}/message_templates`,
           {
             method: 'POST',
             headers: {
@@ -4795,7 +4860,7 @@ async function fetchAndStoreIncomingMedia(
 
       if (!response.ok) {
         console.error('Meta API Error:', JSON.stringify(result, null, 2));
-        let friendly = result.error?.message || 'Meta API returned an error';
+        let friendly = getMetaTemplateErrorMessage(result);
         if (result?.error?.error_subcode === 2388023) {
           friendly = 'A Meta está bloqueando este nome de template porque o anterior (mesmo nome em pt_BR) ainda está em janela de exclusão (~4 semanas). Tente um nome diferente, ex.: adicione "_v2" ao final.';
         }
@@ -4846,7 +4911,7 @@ async function fetchAndStoreIncomingMedia(
       console.log(`Deleting template ${name} from Meta WABA ${meta_waba_id}...`);
       
       const response = await fetch(
-        `https://graph.facebook.com/v20.0/${meta_waba_id}/message_templates?name=${name}`,
+        `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${meta_waba_id}/message_templates?name=${encodeURIComponent(name)}`,
         {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${meta_access_token}` },

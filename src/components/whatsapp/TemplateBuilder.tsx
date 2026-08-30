@@ -233,6 +233,22 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
   };
 
   const handleSubmit = () => {
+    if (!bodyText.trim() && templateType === 'STANDARD') {
+      toast({ title: "Corpo obrigatório", description: "Escreva a mensagem antes de enviar para aprovação.", variant: "destructive" });
+      return;
+    }
+
+    if (headerType === 'TEXT' && !headerText.trim()) {
+      toast({ title: "Cabeçalho vazio", description: "Preencha o cabeçalho ou selecione Nenhum.", variant: "destructive" });
+      return;
+    }
+
+    const invalidButton = buttons.find(button => !String(button.text || '').trim() || (button.type === 'URL' && !/^https?:\/\//i.test(String(button.url || '').trim())));
+    if (templateType === 'STANDARD' && invalidButton) {
+      toast({ title: "Botão incompleto", description: "Preencha o texto e use uma URL completa iniciando com https://.", variant: "destructive" });
+      return;
+    }
+
     if (templateType === 'STANDARD' && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType) && !headerUrl.trim()) {
       toast({
         title: "Mídia obrigatória",
@@ -251,6 +267,22 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
           variant: "destructive",
         });
         setActiveCardIndex(emptyCardIndex);
+        return;
+      }
+
+      const expectedButtonTypes = cards[0].buttons.map((button: any) => button.type).join(',');
+      const invalidCardIndex = cards.findIndex(card =>
+        !String(card.bodyText || '').trim() ||
+        card.buttons.map((button: any) => button.type).join(',') !== expectedButtonTypes ||
+        card.buttons.some((button: any) => !String(button.text || '').trim() || (button.type === 'URL' && !/^https?:\/\//i.test(String(button.url || '').trim())))
+      );
+      if (invalidCardIndex >= 0) {
+        toast({
+          title: "Cartão incompleto",
+          description: `Revise o texto, links e tipos de botão do Cartão ${invalidCardIndex + 1}. Todos os cartões devem usar os mesmos tipos de botão.`,
+          variant: "destructive",
+        });
+        setActiveCardIndex(invalidCardIndex);
         return;
       }
     }
@@ -391,7 +423,6 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
                   <SelectContent>
                     <SelectItem value="MARKETING">Marketing</SelectItem>
                     <SelectItem value="UTILITY">Utilidade</SelectItem>
-                    <SelectItem value="AUTHENTICATION">Autenticação</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
