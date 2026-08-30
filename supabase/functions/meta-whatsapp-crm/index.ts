@@ -3901,8 +3901,9 @@ async function fetchAndStoreIncomingMedia(
       return null;
     }
     const { data: { publicUrl } } = supabase.storage.from('crm-media').getPublicUrl(filePath);
-    console.log('[INCOMING-MEDIA] Stored', { mediaId, type, publicUrl });
-    return publicUrl;
+    const finalUrl = toPublicMediaUrl(publicUrl);
+    console.log('[INCOMING-MEDIA] Stored', { mediaId, type, publicUrl: finalUrl });
+    return finalUrl;
   } catch (err) {
     console.error('[INCOMING-MEDIA] Unexpected error', err);
     return null;
