@@ -57,6 +57,23 @@ function getMetaTemplateErrorMessage(result: any) {
   return trace && detail ? `${detail} (Meta: ${trace})` : detail || 'A Meta recusou os parâmetros do template.';
 }
 
+/**
+ * A Meta recusa botões de URL apontando direto para o WhatsApp
+ * ("Direct links to WhatsApp aren't allowed for buttons").
+ */
+function isWhatsAppDirectLink(value: unknown) {
+  const url = firstNonEmptyString(value);
+  if (!url) return false;
+  if (/^(https?:\/\/)?([a-z0-9-]+\.)*(wa\.me|whatsapp\.com|wa\.link|whatsapp\.net)(\/|$|\?)/i.test(url)) return true;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return /(^|\.)(wa\.me|whatsapp\.com|wa\.link|whatsapp\.net)$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
+
 function validateTemplateForMeta(name: unknown, category: unknown, language: unknown, components: unknown) {
   const templateName = firstNonEmptyString(name);
   if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
