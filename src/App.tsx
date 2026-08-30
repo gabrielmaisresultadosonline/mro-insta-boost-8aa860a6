@@ -14,6 +14,7 @@ import PortfolioVerification from "./pages/PortfolioVerification";
  import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import ConverterVideo from "./pages/ConverterVideo";
+import ShortLinkRedirect from "./pages/ShortLinkRedirect";
 
 const queryClient = new QueryClient();
 
