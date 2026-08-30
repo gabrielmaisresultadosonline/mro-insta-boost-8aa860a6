@@ -38,6 +38,7 @@ const App = () => (
             <Route path="/br/politicadeprivacidade" element={<PrivacyPolicy />} />
             <Route path="/br/termosdoservico" element={<TermsOfService />} />
           <Route path="/converter-video" element={<ConverterVideo />} />
+          <Route path="/l/:code" element={<ShortLinkRedirect />} />
            <Route path="*" element={<Sales />} />
         </Routes>
       </BrowserRouter>
