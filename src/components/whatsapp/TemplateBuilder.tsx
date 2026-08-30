@@ -611,7 +611,28 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({ onSave, isSaving }) =
                     <div key={idx} className="flex gap-2 items-start bg-muted/30 p-2 rounded-lg border">
                       <div className="flex-1 space-y-2">
                         <Input placeholder="Texto" value={btn.text} onChange={e => updateButton(idx, { text: e.target.value })} maxLength={25} />
-                        {btn.type === 'URL' && <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value })} />}
+                        {btn.type === 'URL' && (
+                          <div className="space-y-1">
+                            <div className="flex gap-2">
+                              <Input placeholder="URL" value={btn.url} onChange={e => updateButton(idx, { url: e.target.value })} />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="shrink-0"
+                                disabled={shorteningKey === `std-${idx}`}
+                                onClick={() => shortenButtonUrl(idx)}
+                              >
+                                {shorteningKey === `std-${idx}`
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <><Link2 className="w-3 h-3 mr-1" /> Encurtar</>}
+                              </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              Opcional: gera um link do seu domínio (ex.: /l/ab12cd) — permite usar destinos que a Meta bloqueia, como wa.me.
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => removeButton(idx)} className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
                     </div>
