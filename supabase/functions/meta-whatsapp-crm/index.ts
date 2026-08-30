@@ -3827,8 +3827,9 @@ async function downloadAndStoreMetaMedia(supabase: any, accessToken: string, med
       .from('crm-media')
       .getPublicUrl(filePath);
 
-    console.log(`Permanent URL generated: ${publicUrl}`);
-    return publicUrl;
+    const finalUrl = toPublicMediaUrl(publicUrl);
+    console.log(`Permanent URL generated: ${finalUrl}`);
+    return finalUrl;
   } catch (err) {
     console.error('Error in downloadAndStoreMetaMedia:', err);
     return null;
