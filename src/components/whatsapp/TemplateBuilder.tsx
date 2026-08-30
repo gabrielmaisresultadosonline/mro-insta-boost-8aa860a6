@@ -56,6 +56,26 @@ const hasSequentialTemplateVariables = (value: string) => {
   return indexes.every((index, position) => index === position + 1);
 };
 
+/**
+ * A Meta rejeita botões de URL que apontem direto para o WhatsApp
+ * ("Direct links to WhatsApp aren't allowed for buttons").
+ * Bloqueamos antes do envio para evitar reprovação do template.
+ */
+const WHATSAPP_LINK_PATTERN = /^(https?:\/\/)?([a-z0-9-]+\.)*(wa\.me|whatsapp\.com|wa\.link|whatsapp\.net|api\.whatsapp\.com|chat\.whatsapp\.com)(\/|$|\?)/i;
+
+const isWhatsAppDirectLink = (value: string) => {
+  const url = String(value || '').trim();
+  if (!url) return false;
+  if (WHATSAPP_LINK_PATTERN.test(url)) return true;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return /(^|\.)(wa\.me|whatsapp\.com|wa\.link|whatsapp\.net)$/.test(host);
+  } catch {
+    return false;
+  }
+};
+
+
 const getButtonPayload = (button: any) => {
   const payload: any = { type: button.type, text: String(button.text || '').trim() };
   if (button.type === 'URL') {
