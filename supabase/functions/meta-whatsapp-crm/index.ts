@@ -154,6 +154,12 @@ function validateTemplateForMeta(name: unknown, category: unknown, language: unk
         if (cardButtons.map((button: any) => button?.type).join(',') !== expectedTypes) {
           throw new Error('Todos os cartões do carrossel precisam ter os mesmos tipos de botão, na mesma ordem.');
         }
+        for (const button of cardButtons) {
+          if (button?.type === 'URL' && isWhatsAppDirectLink(button?.url)) {
+            throw new Error(`O cartão ${index + 1} usa um link direto do WhatsApp no botão. A Meta não aprova esse tipo de link.`);
+          }
+        }
+
       }
     }
   }
