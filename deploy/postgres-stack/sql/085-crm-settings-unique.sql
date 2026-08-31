@@ -54,7 +54,7 @@ END $$;
 CREATE TEMP TABLE IF NOT EXISTS crm_contact_duplicate_map (
   duplicate_id uuid PRIMARY KEY,
   keeper_id uuid NOT NULL
-) ON COMMIT DROP;
+);
 
 TRUNCATE crm_contact_duplicate_map;
 
