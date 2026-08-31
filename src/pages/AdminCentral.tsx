@@ -669,6 +669,13 @@ export default function AdminCentral() {
   const [newPwd, setNewPwd] = useState("");
   const [savingPwd, setSavingPwd] = useState(false);
 
+  // Multi WhatsApp por cadastro
+  const [numbersTarget, setNumbersTarget] = useState<AdminUser | null>(null);
+  const [numbersList, setNumbersList] = useState<any[]>([]);
+  const [numbersMax, setNumbersMax] = useState(1);
+  const [numbersLoading, setNumbersLoading] = useState(false);
+  const [numbersSaving, setNumbersSaving] = useState(false);
+
   useEffect(() => {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -808,6 +815,63 @@ export default function AdminCentral() {
       toast.success("Lembrete de acesso enviado por e-mail");
     } catch (err: any) {
       toast.error(err.message || "Erro");
+    }
+  }
+
+  async function openNumbersDialog(u: AdminUser) {
+    setNumbersTarget(u);
+    setNumbersList([]);
+    setNumbersMax(1);
+    setNumbersLoading(true);
+    try {
+      const data = await call("list_user_numbers", { userId: u.id });
+      setNumbersMax(Number(data.maxNumbers) || 1);
+      setNumbersList(data.numbers || []);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao carregar números");
+    } finally {
+      setNumbersLoading(false);
+    }
+  }
+
+  async function saveMaxNumbers(value: number) {
+    if (!numbersTarget) return;
+    setNumbersSaving(true);
+    try {
+      await call("set_max_numbers", { userId: numbersTarget.id, maxNumbers: value });
+      setNumbersMax(value);
+      toast.success(`Cadastro liberado para ${value} número(s) de WhatsApp`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar");
+    } finally {
+      setNumbersSaving(false);
+    }
+  }
+
+  async function saveNumber(numberId: string, patch: { label?: string; accessPin?: string }) {
+    setNumbersSaving(true);
+    try {
+      await call("update_user_number", { numberId, ...patch });
+      toast.success("Número atualizado");
+      if (numbersTarget) await openNumbersDialog(numbersTarget);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar número");
+    } finally {
+      setNumbersSaving(false);
+    }
+  }
+
+  async function removeNumber(numberId: string) {
+    if (!confirm("Remover este número do cadastro?")) return;
+    setNumbersSaving(true);
+    try {
+      await call("delete_user_number", { numberId });
+      toast.success("Número removido");
+      if (numbersTarget) await openNumbersDialog(numbersTarget);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover");
+    } finally {
+      setNumbersSaving(false);
     }
   }
 
@@ -1076,6 +1140,9 @@ export default function AdminCentral() {
                     <Button size="sm" variant="outline" onClick={() => handleSendReset(u)} className="bg-white border-[#E8F5F1] text-[#075E54] hover:bg-[#F0FDF4]">
                       <Mail className="h-4 w-4 mr-1" /> Lembrar acesso
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => openNumbersDialog(u)} className="bg-white border-[#E8F5F1] text-[#075E54] hover:bg-[#F0FDF4]">
+                      <MessageCircle className="h-4 w-4 mr-1" /> Números WhatsApp
+                    </Button>
                     {u.connected && (
                       <Button size="sm" onClick={() => handleImpersonate(u)} className="bg-[#25D366] text-white hover:bg-[#1eb356]">
                         <ExternalLink className="h-4 w-4 mr-1" /> Acessar WhatsApp
@@ -1185,6 +1252,102 @@ export default function AdminCentral() {
       </Dialog>
 
       {/* Password dialog */}
+      {/* Multi WhatsApp: libera quantidade e senha por número */}
+      <Dialog open={!!numbersTarget} onOpenChange={(o) => !o && setNumbersTarget(null)}>
+        <DialogContent className="max-w-lg bg-white border-[#E8F5F1] text-[#075E54]">
+          <DialogHeader>
+            <DialogTitle className="text-[#075E54]">Números de WhatsApp do cadastro</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-[#075E54]/70">{numbersTarget?.email}</p>
+
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-[#075E54]">
+                  Quantos WhatsApps este cadastro pode conectar
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={numbersMax}
+                  onChange={(e) => setNumbersMax(Math.max(1, Number(e.target.value) || 1))}
+                  className="mt-1 bg-white border-[#E8F5F1] text-[#075E54]"
+                />
+              </div>
+              <Button
+                onClick={() => saveMaxNumbers(numbersMax)}
+                disabled={numbersSaving}
+                className="bg-[#25D366] text-white hover:bg-[#1eb356]"
+              >
+                {numbersSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-[#075E54]/60">
+              Com 2 ou mais, o usuário passa a escolher qual WhatsApp abrir antes das conversas e
+              pode trocar a qualquer momento pelo botão “Trocar WhatsApp”.
+            </p>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {numbersLoading && (
+                <div className="py-6 flex justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#25D366]" />
+                </div>
+              )}
+              {!numbersLoading && numbersList.length === 0 && (
+                <p className="text-xs text-[#075E54]/60 py-4 text-center">
+                  Nenhum número conectado ainda neste cadastro.
+                </p>
+              )}
+              {numbersList.map((n) => (
+                <div key={n.id} className="rounded-lg border border-[#E8F5F1] p-3 space-y-2">
+                  <p className="text-sm font-semibold">
+                    {n.meta_display_phone_number || n.meta_verified_name || n.label || n.meta_phone_number_id}
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      defaultValue={n.label || ""}
+                      placeholder="Apelido"
+                      onBlur={(e) =>
+                        e.target.value !== (n.label || "") &&
+                        saveNumber(n.id, { label: e.target.value })
+                      }
+                      className="bg-white border-[#E8F5F1] text-[#075E54]"
+                    />
+                    <Input
+                      defaultValue={n.access_pin || ""}
+                      placeholder="Senha do número (opcional)"
+                      onBlur={(e) =>
+                        e.target.value !== (n.access_pin || "") &&
+                        saveNumber(n.id, { accessPin: e.target.value })
+                      }
+                      className="bg-white border-[#E8F5F1] text-[#075E54]"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => removeNumber(n.id)}
+                      disabled={numbersSaving}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setNumbersTarget(null)}
+              className="bg-white border-[#E8F5F1] text-[#075E54] hover:bg-[#F0FDF4]"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={pwdDialogOpen} onOpenChange={setPwdDialogOpen}>
         <DialogContent className="max-w-md bg-white border-[#E8F5F1] text-[#075E54]">
           <DialogHeader>
