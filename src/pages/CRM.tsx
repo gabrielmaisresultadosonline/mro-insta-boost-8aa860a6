@@ -831,9 +831,36 @@ const CRM = () => {
     }
   }, [addConnectionLog, toast]);
 
+  // Relógio usado pelos contadores regressivos (janela de 24h, timeout de
+  // fluxo, próxima ação). Ele força um re-render por segundo, então é pausado
+  // enquanto a aba está em segundo plano — no celular isso evita que o
+  // navegador fique processando a árvore inteira do CRM sem ninguém olhando.
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
+    let interval: number | undefined;
+
+    const start = () => {
+      if (interval !== undefined) return;
+      setNow(Date.now());
+      interval = window.setInterval(() => setNow(Date.now()), 1000);
+    };
+
+    const stop = () => {
+      if (interval === undefined) return;
+      window.clearInterval(interval);
+      interval = undefined;
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    };
+
+    handleVisibility();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      stop();
+    };
   }, []);
 
   // Meta Embedded Signup (WhatsApp Tech Provider) ---------------------------
@@ -2069,6 +2096,38 @@ const CRM = () => {
     frozenOrderRef.current = nextOrder;
     return nextOrder.map(id => byId.get(id)).filter(Boolean) as any[];
   }, [statusFilter, conversationContacts, activeTab, freezeConversationOrder]);
+
+  // ---------------------------------------------------------------------
+  // Listas derivadas memoizadas.
+  // Antes estes filtros/ordenações rodavam inline no JSX, ou seja, varriam
+  // todos os contatos/mensagens a cada tecla digitada e a cada tick de 1s do
+  // relógio. O resultado é idêntico — apenas deixa de ser recalculado à toa.
+  // ---------------------------------------------------------------------
+
+  /** Contatos com fluxo em andamento (aba "Fluxos em Andamento"). */
+  const activeFlowContacts = useMemo(
+    () => contacts.filter(c => c.flow_state && c.flow_state !== 'idle'),
+    [contacts]
+  );
+
+  /** Mensagens do chat aberto em ordem cronológica. */
+  const sortedChatMessages = useMemo(
+    () => [...chatMessages].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ),
+    [chatMessages]
+  );
+
+  /** Histórico de agendamentos já processados (mobile + desktop usam o mesmo). */
+  const scheduledHistory = useMemo(
+    () => allScheduledMessages
+      .filter((m: any) => m.status !== 'pending')
+      .sort((a: any, b: any) => new Date(b.scheduled_for).getTime() - new Date(a.scheduled_for).getTime())
+      .slice(0, 20),
+    [allScheduledMessages]
+  );
+
+
 
   const fetchData = async (isInitialLoad = false) => {
      if (isInitialLoad) setLoading(true);
@@ -5161,19 +5220,19 @@ const CRM = () => {
                           <p className="text-muted-foreground text-sm">Contatos que estão interagindo com automações agora.</p>
                         </div>
                         <Badge variant="outline" className="bg-[#00a884]/5 text-[#00a884] border-[#00a884]/20 font-black px-3 py-1">
-                          {contacts.filter(c => c.flow_state && c.flow_state !== 'idle').length} ATIVOS
+                          {activeFlowContacts.length} ATIVOS
                         </Badge>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3">
-                        {contacts.filter(c => c.flow_state && c.flow_state !== 'idle').length === 0 ? (
+                        {activeFlowContacts.length === 0 ? (
                           <div className="py-20 text-center bg-card rounded-2xl border-2 border-dashed border-muted">
                             <GitBranch className="w-12 h-12 mx-auto text-muted-foreground opacity-20 mb-4" />
                             <h3 className="text-lg font-medium">Nenhum fluxo ativo no momento</h3>
                             <p className="text-sm text-muted-foreground">Novos fluxos aparecerão aqui conforme os gatilhos forem acionados.</p>
                           </div>
                         ) : (
-                          contacts.filter(c => c.flow_state && c.flow_state !== 'idle').map(contact => {
+                          activeFlowContacts.map(contact => {
                             const flow = flows.find(f => f.id === contact.current_flow_id);
                             return (
                               <Card key={contact.id} className="overflow-hidden border shadow-sm hover:shadow-md transition-shadow rounded-xl">
@@ -6304,9 +6363,7 @@ const CRM = () => {
                                 </div>
                               )}
                               {(() => {
-                                const sortedMessages = [...chatMessages].sort(
-                                  (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                                );
+                                const sortedMessages = sortedChatMessages;
                                 const formatDaySeparator = (iso: string) => {
                                   const d = new Date(iso);
                                   const today = new Date();
@@ -7093,10 +7150,8 @@ const CRM = () => {
                       <CardContent className="p-0">
                         {/* Mobile cards */}
                         <div className="md:hidden divide-y">
-                          {allScheduledMessages.filter(m => m.status !== 'pending').length > 0 ? (
-                            allScheduledMessages.filter(m => m.status !== 'pending')
-                              .sort((a, b) => new Date(b.scheduled_for).getTime() - new Date(a.scheduled_for).getTime())
-                              .slice(0, 20)
+                          {scheduledHistory.length > 0 ? (
+                            scheduledHistory
                               .map((msg) => (
                               <div key={msg.id} className="p-4 flex flex-col gap-2">
                                 <div className="flex justify-between items-start gap-2">
@@ -7139,10 +7194,8 @@ const CRM = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y">
-                              {allScheduledMessages.filter(m => m.status !== 'pending').length > 0 ? (
-                                allScheduledMessages.filter(m => m.status !== 'pending')
-                                  .sort((a, b) => new Date(b.scheduled_for).getTime() - new Date(a.scheduled_for).getTime())
-                                  .slice(0, 20)
+                              {scheduledHistory.length > 0 ? (
+                                scheduledHistory
                                   .map((msg) => (
                                   <tr key={msg.id} className="hover:bg-muted/20 transition-colors">
                                     <td className="px-6 py-4 font-bold">
