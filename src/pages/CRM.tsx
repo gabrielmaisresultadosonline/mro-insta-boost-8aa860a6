@@ -2070,6 +2070,38 @@ const CRM = () => {
     return nextOrder.map(id => byId.get(id)).filter(Boolean) as any[];
   }, [statusFilter, conversationContacts, activeTab, freezeConversationOrder]);
 
+  // ---------------------------------------------------------------------
+  // Listas derivadas memoizadas.
+  // Antes estes filtros/ordenações rodavam inline no JSX, ou seja, varriam
+  // todos os contatos/mensagens a cada tecla digitada e a cada tick de 1s do
+  // relógio. O resultado é idêntico — apenas deixa de ser recalculado à toa.
+  // ---------------------------------------------------------------------
+
+  /** Contatos com fluxo em andamento (aba "Fluxos em Andamento"). */
+  const activeFlowContacts = useMemo(
+    () => contacts.filter(c => c.flow_state && c.flow_state !== 'idle'),
+    [contacts]
+  );
+
+  /** Mensagens do chat aberto em ordem cronológica. */
+  const sortedChatMessages = useMemo(
+    () => [...chatMessages].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ),
+    [chatMessages]
+  );
+
+  /** Histórico de agendamentos já processados (mobile + desktop usam o mesmo). */
+  const scheduledHistory = useMemo(
+    () => allScheduledMessages
+      .filter((m: any) => m.status !== 'pending')
+      .sort((a: any, b: any) => new Date(b.scheduled_for).getTime() - new Date(a.scheduled_for).getTime())
+      .slice(0, 20),
+    [allScheduledMessages]
+  );
+
+
+
   const fetchData = async (isInitialLoad = false) => {
      if (isInitialLoad) setLoading(true);
 
