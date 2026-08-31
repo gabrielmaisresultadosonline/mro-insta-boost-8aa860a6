@@ -6336,9 +6336,7 @@ const CRM = () => {
                                 </div>
                               )}
                               {(() => {
-                                const sortedMessages = [...chatMessages].sort(
-                                  (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                                );
+                                const sortedMessages = sortedChatMessages;
                                 const formatDaySeparator = (iso: string) => {
                                   const d = new Date(iso);
                                   const today = new Date();
