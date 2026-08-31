@@ -1210,18 +1210,56 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
               )}
 
               {targetType === 'tag' && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <Label className="text-xs md:text-sm">Selecione a Etiqueta</Label>
-                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                    <SelectTrigger className="h-10 md:h-11 rounded-xl bg-[#202c33] border-none text-[#e9edef] text-xs md:text-sm">
-                      <SelectValue placeholder="Escolha uma etiqueta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statuses.map(s => (
-                        <SelectItem key={s.id} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 p-3 bg-[#202c33] rounded-xl border border-white/5">
+                  <Label className="text-xs md:text-sm flex items-center gap-2 text-white">
+                    <Bookmark className="w-3.5 h-3.5 text-[#00a884]" /> Selecione uma ou mais Etiquetas
+                  </Label>
+                  <p className="text-[10px] text-white/40">
+                    Você pode combinar várias etiquetas — os contatos de todas elas entram no mesmo disparo (sem duplicar).
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {statuses.length === 0 && (
+                      <span className="text-[10px] text-white/40 italic">Nenhuma etiqueta cadastrada.</span>
+                    )}
+                    {statuses.map((s: any) => {
+                      const val = s.value || s.name;
+                      const active = selectedStatuses.includes(val);
+                      return (
+                        <button
+                          key={s.id || val}
+                          type="button"
+                          onClick={() =>
+                            setSelectedStatuses(prev =>
+                              prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]
+                            )
+                          }
+                          className={cn(
+                            "px-2.5 py-1 rounded-full text-[10px] md:text-xs font-medium border transition-all",
+                            active
+                              ? "bg-[#00a884] text-white border-[#00a884]"
+                              : "bg-transparent text-white/70 border-white/15 hover:border-[#00a884]/60"
+                          )}
+                          style={active && s.color ? { backgroundColor: s.color, borderColor: s.color } : undefined}
+                        >
+                          {s.label || s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedStatuses.length > 0 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-2">
+                      <span className="text-[10px] text-[#00a884]">
+                        ✓ {finalRecipients.length} contato(s) selecionado(s)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStatuses([])}
+                        className="text-[10px] underline text-white/50 hover:text-white"
+                      >
+                        Limpar etiquetas
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
