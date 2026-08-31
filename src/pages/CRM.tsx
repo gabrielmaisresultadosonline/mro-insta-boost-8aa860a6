@@ -4959,7 +4959,7 @@ const CRM = () => {
     <SidebarProvider>
       <div className={`h-[100dvh] w-full flex overflow-hidden bg-[#f0f2f5] dark:bg-[#0c1317] ${crmTheme === 'light' ? 'crm-theme-light' : ''}`}>
         <AnnouncementPopup />
-        {multiNumberEnabled && (
+        {(multiNumberEnabled || userNumbersCount > 1) && (
           <button
             type="button"
             onClick={handleSwitchNumber}
