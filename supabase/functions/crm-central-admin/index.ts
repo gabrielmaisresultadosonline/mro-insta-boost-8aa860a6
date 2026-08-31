@@ -114,7 +114,7 @@ serve(async (req) => {
       } else if (kind === "storage") {
         sql = await safe("admin_dump_storage", { p_offset: Number(offset) || 0, p_limit: Number(limit) || 1000 });
       } else {
-        return json({ success: false, error: "kind inválido" }, 400);
+        return json({ success: false, error: "kind inválido" });
       }
 
       // Conta statements reais (valores podem conter quebras de linha)
@@ -405,7 +405,7 @@ serve(async (req) => {
 
     if (action === "user_insights") {
       const { userId } = body as any;
-      if (!userId) return json({ success: false, error: "userId obrigatório" }, 400);
+      if (!userId) return json({ success: false, error: "userId obrigatório" });
 
       // Total messages
       const { count: totalReceived } = await supabase
@@ -474,7 +474,7 @@ serve(async (req) => {
     if (action === "set_password") {
       const { userId, newPassword } = body as any;
       if (!userId || !newPassword || newPassword.length < 6) {
-        return json({ success: false, error: "Senha inválida (mínimo 6 caracteres)" }, 400);
+        return json({ success: false, error: "Senha inválida (mínimo 6 caracteres)" });
       }
       const { error } = await supabase.auth.admin.updateUserById(userId, {
         password: newPassword,
@@ -485,11 +485,11 @@ serve(async (req) => {
 
     if (action === "impersonate") {
       const { userId } = body as any;
-      if (!userId) return json({ success: false, error: "userId obrigatório" }, 400);
+      if (!userId) return json({ success: false, error: "userId obrigatório" });
 
       const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(userId);
       if (userErr || !userData?.user?.email) {
-        return json({ success: false, error: "Usuário não encontrado" }, 404);
+        return json({ success: false, error: "Usuário não encontrado" });
       }
       // O acesso administrativo deve sempre abrir no domínio oficial, nunca no
       // domínio da prévia ou no link intermediário do provedor de autenticação.
@@ -516,7 +516,7 @@ serve(async (req) => {
 
     if (action === "send_reset_email" || action === "send_access_reminder") {
       const { email, userId: uidRaw } = body as any;
-      if (!email && !uidRaw) return json({ success: false, error: "Email obrigatório" }, 400);
+      if (!email && !uidRaw) return json({ success: false, error: "Email obrigatório" });
 
       // Find user
       let targetUser: any = null;
@@ -536,7 +536,7 @@ serve(async (req) => {
           page++;
         }
       }
-      if (!targetUser) return json({ success: false, error: "Usuário não encontrado" }, 404);
+      if (!targetUser) return json({ success: false, error: "Usuário não encontrado" });
 
       // Generate a new temporary password
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -567,7 +567,7 @@ serve(async (req) => {
 
     if (action === "delete_user") {
       const { userId } = body as any;
-      if (!userId) return json({ success: false, error: "userId obrigatório" }, 400);
+      if (!userId) return json({ success: false, error: "userId obrigatório" });
 
       // Clean ALL dependent data first (FK to auth.users would block delete)
       const tables = [
@@ -613,7 +613,7 @@ serve(async (req) => {
 
     if (action === "disconnect_whatsapp") {
       const { userId } = body as any;
-      if (!userId) return json({ success: false, error: "userId obrigatório" }, 400);
+      if (!userId) return json({ success: false, error: "userId obrigatório" });
       const { error } = await supabase
         .from("crm_settings")
         .update({
@@ -641,7 +641,7 @@ serve(async (req) => {
 
     if (action === "create_announcement") {
       const { title, message, frequency, start_date, end_date, active } = body as any;
-      if (!title || !message) return json({ success: false, error: "Título e mensagem são obrigatórios" }, 400);
+      if (!title || !message) return json({ success: false, error: "Título e mensagem são obrigatórios" });
       const { data, error } = await supabase.from("admin_announcements").insert({
         title,
         message,
@@ -656,7 +656,7 @@ serve(async (req) => {
 
     if (action === "update_announcement") {
       const { id, ...rest } = body as any;
-      if (!id) return json({ success: false, error: "id obrigatório" }, 400);
+      if (!id) return json({ success: false, error: "id obrigatório" });
       const patch: any = {};
       for (const k of ["title","message","frequency","start_date","end_date","active"]) {
         if (k in rest) patch[k] = rest[k];
@@ -668,7 +668,7 @@ serve(async (req) => {
 
     if (action === "delete_announcement") {
       const { id } = body as any;
-      if (!id) return json({ success: false, error: "id obrigatório" }, 400);
+      if (!id) return json({ success: false, error: "id obrigatório" });
       const { error } = await supabase.from("admin_announcements").delete().eq("id", id);
       if (error) throw error;
       return json({ success: true });
@@ -693,7 +693,7 @@ serve(async (req) => {
 
     if (action === "delete_sales_order") {
       const { id } = body as any;
-      if (!id) return json({ success: false, error: "id obrigatório" }, 400);
+      if (!id) return json({ success: false, error: "id obrigatório" });
       const { error } = await supabase.from("crm_sales_orders").delete().eq("id", id);
       if (error) throw error;
       return json({ success: true });
@@ -701,7 +701,7 @@ serve(async (req) => {
 
     if (action === "approve_sales_order") {
       const { id, plan } = body as any;
-      if (!id) return json({ success: false, error: "id obrigatório" }, 400);
+      if (!id) return json({ success: false, error: "id obrigatório" });
       const PLANS: Record<string, { label: string; amount: number; days: number }> = {
         mensal: { label: "Plano Mensal", amount: 137, days: 30 },
         semestral: { label: "Plano 6 Meses", amount: 397, days: 180 },
@@ -751,13 +751,13 @@ serve(async (req) => {
 
     if (action === "migrate_sales_order_plan") {
       const { id, plan } = body as any;
-      if (!id || !plan) return json({ success: false, error: "id e plan obrigatórios" }, 400);
+      if (!id || !plan) return json({ success: false, error: "id e plan obrigatórios" });
       const PLANS: Record<string, { label: string; amount: number }> = {
         mensal: { label: "Plano Mensal", amount: 137 },
         semestral: { label: "Plano 6 Meses", amount: 397 },
         anual: { label: "Plano Anual (1 ano)", amount: 597 },
       };
-      if (!PLANS[plan]) return json({ success: false, error: "Plano inválido" }, 400);
+      if (!PLANS[plan]) return json({ success: false, error: "Plano inválido" });
       const { error } = await supabase.from("crm_sales_orders").update({
         plan,
         plan_label: PLANS[plan].label,
@@ -947,7 +947,7 @@ serve(async (req) => {
 
     if (action === "cancel_access") {
       const { email } = body as any;
-      if (!email) return json({ success: false, error: "email obrigatório" }, 400);
+      if (!email) return json({ success: false, error: "email obrigatório" });
       const cleanEmail = String(email).trim().toLowerCase();
 
       // Localiza o usuário pelo email (paginado)
@@ -964,7 +964,7 @@ serve(async (req) => {
         page++;
         if (page > 20) break;
       }
-      if (!targetId) return json({ success: false, error: "Usuário não encontrado" }, 404);
+      if (!targetId) return json({ success: false, error: "Usuário não encontrado" });
 
       const nowIso = new Date().toISOString();
       // Cancela o plano: acesso expirado imediatamente e teste também encerrado,
@@ -990,7 +990,7 @@ serve(async (req) => {
     if (action === "resend_access_email") {
 
       const { email } = body as any;
-      if (!email) return json({ success: false, error: "email obrigatório" }, 400);
+      if (!email) return json({ success: false, error: "email obrigatório" });
       const cleanEmail = String(email).trim().toLowerCase();
 
       // Latest sales order for this email (to reuse plan/label/link)
@@ -1055,7 +1055,7 @@ serve(async (req) => {
       return json({ success: true });
     }
 
-    return json({ success: false, error: `Ação inválida: ${action}` }, 400);
+    return json({ success: false, error: `Ação inválida: ${action}` });
   } catch (e: any) {
     console.error("[crm-central-admin] error:", e);
     return json({ success: false, error: e.message || "Erro interno" }, 500);
