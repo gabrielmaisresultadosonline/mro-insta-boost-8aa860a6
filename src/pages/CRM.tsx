@@ -6433,8 +6433,20 @@ const CRM = () => {
                                   </div>
                                 </div>
                               )}
+                              {hiddenOlderMessages > 0 && (
+                                <div className="flex justify-center py-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] font-bold uppercase tracking-wider"
+                                    onClick={() => setVisibleMessageCount(current => current + 50)}
+                                  >
+                                    Carregar mensagens anteriores ({hiddenOlderMessages})
+                                  </Button>
+                                </div>
+                              )}
                               {(() => {
-                                const sortedMessages = sortedChatMessages;
+                                const sortedMessages = visibleChatMessages;
                                 const formatDaySeparator = (iso: string) => {
                                   const d = new Date(iso);
                                   const today = new Date();
