@@ -5193,19 +5193,19 @@ const CRM = () => {
                           <p className="text-muted-foreground text-sm">Contatos que estão interagindo com automações agora.</p>
                         </div>
                         <Badge variant="outline" className="bg-[#00a884]/5 text-[#00a884] border-[#00a884]/20 font-black px-3 py-1">
-                          {contacts.filter(c => c.flow_state && c.flow_state !== 'idle').length} ATIVOS
+                          {activeFlowContacts.length} ATIVOS
                         </Badge>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3">
-                        {contacts.filter(c => c.flow_state && c.flow_state !== 'idle').length === 0 ? (
+                        {activeFlowContacts.length === 0 ? (
                           <div className="py-20 text-center bg-card rounded-2xl border-2 border-dashed border-muted">
                             <GitBranch className="w-12 h-12 mx-auto text-muted-foreground opacity-20 mb-4" />
                             <h3 className="text-lg font-medium">Nenhum fluxo ativo no momento</h3>
                             <p className="text-sm text-muted-foreground">Novos fluxos aparecerão aqui conforme os gatilhos forem acionados.</p>
                           </div>
                         ) : (
-                          contacts.filter(c => c.flow_state && c.flow_state !== 'idle').map(contact => {
+                          activeFlowContacts.map(contact => {
                             const flow = flows.find(f => f.id === contact.current_flow_id);
                             return (
                               <Card key={contact.id} className="overflow-hidden border shadow-sm hover:shadow-md transition-shadow rounded-xl">
