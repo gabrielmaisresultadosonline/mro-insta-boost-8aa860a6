@@ -5805,7 +5805,7 @@ const CRM = () => {
 
                         {filteredContacts.length > 0 ? (
 
-                          filteredContacts.map(contact => (
+                          visibleFilteredContacts.map(contact => (
                             <SwipeableContactRow
                               key={contact.id}
                               onClear={() => setConfirmConvAction({ type: 'clear', contactId: contact.id, contactName: getGoogleResolvedContact(contact).displayName })}
