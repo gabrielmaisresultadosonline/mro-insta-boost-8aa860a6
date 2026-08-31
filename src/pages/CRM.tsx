@@ -4871,7 +4871,7 @@ const CRM = () => {
     persistActiveNumberId(currentUserId, null);
     setActiveNumberId(null);
   };
-  if (!loading && multiNumberEnabled && currentUserId && !activeNumberId) {
+  if (!loading && currentUserId && isWhatsAppConnected && !activeNumberId) {
     return (
       <WhatsAppNumberSelector
         userId={currentUserId}
