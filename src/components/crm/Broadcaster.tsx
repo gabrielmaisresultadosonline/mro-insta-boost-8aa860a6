@@ -251,7 +251,7 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
         .map(wa => ({ wa_id: wa, name: wa }));
     }
     return [];
-  }, [targetType, selectedStatus, contacts, uploadedNumbers, conversationTagFilter, selectedTags24h]);
+  }, [targetType, selectedStatuses, contacts, uploadedNumbers, conversationTagFilter, selectedTags24h]);
 
   /** Reescreve a caixa de números já corrigidos (55 + 9º dígito), sem duplicados. */
   const normalizeUploadedList = async (raw?: string) => {
