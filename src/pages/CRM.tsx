@@ -2118,6 +2118,69 @@ const CRM = () => {
     [chatMessages]
   );
 
+  // ---------------------------------------------------------------------
+  // Renderização incremental (janela virtual leve).
+  // Em vez de montar 10k+ linhas de contato e todo o histórico do chat de
+  // uma vez, renderizamos uma janela e ampliamos conforme o usuário rola.
+  // Nenhum dado é removido — apenas o DOM deixa de nascer gigante.
+  // ---------------------------------------------------------------------
+  const CONTACTS_PAGE_SIZE = 40;
+  const MESSAGES_PAGE_SIZE = 50;
+
+  const [visibleContactCount, setVisibleContactCount] = useState(CONTACTS_PAGE_SIZE);
+  const contactsSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Ao trocar de filtro/aba a janela volta ao início.
+  useEffect(() => {
+    setVisibleContactCount(CONTACTS_PAGE_SIZE);
+  }, [statusFilter, activeTab]);
+
+  const visibleFilteredContacts = useMemo(
+    () => (visibleContactCount >= filteredContacts.length
+      ? filteredContacts
+      : filteredContacts.slice(0, visibleContactCount)),
+    [filteredContacts, visibleContactCount]
+  );
+
+  const hasMoreContactsToRender = visibleFilteredContacts.length < filteredContacts.length;
+
+  useEffect(() => {
+    if (!hasMoreContactsToRender) return;
+    const el = contactsSentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          setVisibleContactCount(current => current + CONTACTS_PAGE_SIZE);
+        }
+      },
+      { rootMargin: '600px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMoreContactsToRender, visibleFilteredContacts.length]);
+
+  const [visibleMessageCount, setVisibleMessageCount] = useState(MESSAGES_PAGE_SIZE);
+
+  // Cada conversa aberta começa mostrando apenas as últimas mensagens.
+  useEffect(() => {
+    setVisibleMessageCount(MESSAGES_PAGE_SIZE);
+  }, [selectedContact?.id]);
+
+  /**
+   * Mensagens efetivamente renderizadas. Durante uma busca no chat mostramos
+   * o histórico completo para que a navegação por resultados continue exata.
+   */
+  const visibleChatMessages = useMemo(() => {
+    if (chatSearchQuery.trim()) return sortedChatMessages;
+    if (visibleMessageCount >= sortedChatMessages.length) return sortedChatMessages;
+    return sortedChatMessages.slice(-visibleMessageCount);
+  }, [sortedChatMessages, visibleMessageCount, chatSearchQuery]);
+
+  const hiddenOlderMessages = sortedChatMessages.length - visibleChatMessages.length;
+
+
+
   /** Histórico de agendamentos já processados (mobile + desktop usam o mesmo). */
   const scheduledHistory = useMemo(
     () => allScheduledMessages
