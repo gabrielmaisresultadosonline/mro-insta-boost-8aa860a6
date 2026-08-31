@@ -670,28 +670,36 @@ export default function AdminCentral() {
 
   async function call(action: string, extra: Record<string, any> = {}) {
     if (!creds) throw new Error("no creds");
-    const { data, error } = await supabase.functions.invoke("crm-central-admin", {
-      body: { action, adminEmail: creds.email, adminPassword: creds.password, ...extra },
+    const data = await invokeAdminFn({
+      action,
+      adminEmail: creds.email,
+      adminPassword: creds.password,
+      ...extra,
     });
-    if (error) throw error;
     if (!data?.success) throw new Error(data?.error || "Erro");
     return data;
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    if (loggingIn) return;
+    const email = loginEmail.trim().toLowerCase();
+    const password = loginPwd.trim();
+    if (!email || !password) {
+      toast.error("Informe e-mail e senha");
+      return;
+    }
     setLoggingIn(true);
     try {
-      const { data, error } = await supabase.functions.invoke("crm-central-admin", {
-        body: { action: "login", adminEmail: loginEmail, adminPassword: loginPwd },
-      });
-      if (error || !data?.success) throw new Error(data?.error || "Credenciais inválidas");
-      const c = { email: loginEmail, password: loginPwd };
+      const data = await invokeAdminFn({ action: "login", adminEmail: email, adminPassword: password });
+      if (!data?.success) throw new Error(data?.error || "Credenciais inválidas");
+      const c = { email, password };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(c));
       setCreds(c);
       toast.success("Bem-vindo ao Admin Central");
     } catch (err: any) {
-      toast.error(err.message || "Falha no login");
+      toast.error(err?.message || "Falha no login");
+
     } finally {
       setLoggingIn(false);
     }
