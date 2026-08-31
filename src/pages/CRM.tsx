@@ -2118,6 +2118,69 @@ const CRM = () => {
     [chatMessages]
   );
 
+  // ---------------------------------------------------------------------
+  // Renderização incremental (janela virtual leve).
+  // Em vez de montar 10k+ linhas de contato e todo o histórico do chat de
+  // uma vez, renderizamos uma janela e ampliamos conforme o usuário rola.
+  // Nenhum dado é removido — apenas o DOM deixa de nascer gigante.
+  // ---------------------------------------------------------------------
+  const CONTACTS_PAGE_SIZE = 40;
+  const MESSAGES_PAGE_SIZE = 50;
+
+  const [visibleContactCount, setVisibleContactCount] = useState(CONTACTS_PAGE_SIZE);
+  const contactsSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Ao trocar de filtro/aba a janela volta ao início.
+  useEffect(() => {
+    setVisibleContactCount(CONTACTS_PAGE_SIZE);
+  }, [statusFilter, activeTab]);
+
+  const visibleFilteredContacts = useMemo(
+    () => (visibleContactCount >= filteredContacts.length
+      ? filteredContacts
+      : filteredContacts.slice(0, visibleContactCount)),
+    [filteredContacts, visibleContactCount]
+  );
+
+  const hasMoreContactsToRender = visibleFilteredContacts.length < filteredContacts.length;
+
+  useEffect(() => {
+    if (!hasMoreContactsToRender) return;
+    const el = contactsSentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          setVisibleContactCount(current => current + CONTACTS_PAGE_SIZE);
+        }
+      },
+      { rootMargin: '600px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMoreContactsToRender, visibleFilteredContacts.length]);
+
+  const [visibleMessageCount, setVisibleMessageCount] = useState(MESSAGES_PAGE_SIZE);
+
+  // Cada conversa aberta começa mostrando apenas as últimas mensagens.
+  useEffect(() => {
+    setVisibleMessageCount(MESSAGES_PAGE_SIZE);
+  }, [selectedContact?.id]);
+
+  /**
+   * Mensagens efetivamente renderizadas. Durante uma busca no chat mostramos
+   * o histórico completo para que a navegação por resultados continue exata.
+   */
+  const visibleChatMessages = useMemo(() => {
+    if (chatSearchQuery.trim()) return sortedChatMessages;
+    if (visibleMessageCount >= sortedChatMessages.length) return sortedChatMessages;
+    return sortedChatMessages.slice(-visibleMessageCount);
+  }, [sortedChatMessages, visibleMessageCount, chatSearchQuery]);
+
+  const hiddenOlderMessages = sortedChatMessages.length - visibleChatMessages.length;
+
+
+
   /** Histórico de agendamentos já processados (mobile + desktop usam o mesmo). */
   const scheduledHistory = useMemo(
     () => allScheduledMessages
@@ -5742,7 +5805,7 @@ const CRM = () => {
 
                         {filteredContacts.length > 0 ? (
 
-                          filteredContacts.map(contact => (
+                          visibleFilteredContacts.map(contact => (
                             <SwipeableContactRow
                               key={contact.id}
                               onClear={() => setConfirmConvAction({ type: 'clear', contactId: contact.id, contactName: getGoogleResolvedContact(contact).displayName })}
@@ -5917,6 +5980,14 @@ const CRM = () => {
                         ) : (
                           <div className="p-8 text-center text-muted-foreground text-sm italic">
                             Nenhum contato encontrado
+                          </div>
+                        )}
+
+                        {/* Sentinela: amplia a janela de contatos ao chegar no fim da rolagem. */}
+                        {hasMoreContactsToRender && (
+                          <div ref={contactsSentinelRef} className="p-4 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+                            <div className="h-3 w-3 rounded-full border-2 border-[#00a884] border-t-transparent animate-spin" />
+                            Carregando mais contatos...
                           </div>
                         )}
                       </ScrollArea>
@@ -6362,8 +6433,20 @@ const CRM = () => {
                                   </div>
                                 </div>
                               )}
+                              {hiddenOlderMessages > 0 && (
+                                <div className="flex justify-center py-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] font-bold uppercase tracking-wider"
+                                    onClick={() => setVisibleMessageCount(current => current + 50)}
+                                  >
+                                    Carregar mensagens anteriores ({hiddenOlderMessages})
+                                  </Button>
+                                </div>
+                              )}
                               {(() => {
-                                const sortedMessages = sortedChatMessages;
+                                const sortedMessages = visibleChatMessages;
                                 const formatDaySeparator = (iso: string) => {
                                   const d = new Date(iso);
                                   const today = new Date();
