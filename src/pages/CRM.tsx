@@ -172,14 +172,17 @@ const getLatestIsoValue = (first: unknown, second: unknown): string | null => {
 const compareConversationContacts = (a: any, b: any): number => {
   const now = Date.now();
   const windowDuration = 24 * 60 * 60 * 1000;
-  const aInbound = a?.last_message_received_at ? new Date(a.last_message_received_at).getTime() : 0;
-  const bInbound = b?.last_message_received_at ? new Date(b.last_message_received_at).getTime() : 0;
-  const aWindowOpen = aInbound > 0 && now - aInbound < windowDuration;
-  const bWindowOpen = bInbound > 0 && now - bInbound < windowDuration;
+  // Atividade recente inclui envios (disparo em massa/template), não apenas
+  // mensagens recebidas — assim campanhas aparecem no topo em tempo real.
+  const aActivity = getConversationActivityTime(a);
+  const bActivity = getConversationActivityTime(b);
+  const aRecent = aActivity > 0 && now - aActivity < windowDuration;
+  const bRecent = bActivity > 0 && now - bActivity < windowDuration;
 
-  if (aWindowOpen !== bWindowOpen) return aWindowOpen ? -1 : 1;
-  return getConversationActivityTime(b) - getConversationActivityTime(a);
+  if (aRecent !== bRecent) return aRecent ? -1 : 1;
+  return bActivity - aActivity;
 };
+
 
 const deduplicateConversationContacts = (rows: any[]): any[] => {
   const byConversation = new Map<string, any>();
@@ -1594,6 +1597,25 @@ const CRM = () => {
         if (payload.eventType === 'INSERT') {
           const newMessage: any = payload.new;
           if (!currentUserIdRef.current || newMessage.user_id !== currentUserIdRef.current) return;
+          // Disparos em massa/templates podem criar contatos novos (lista fria)
+          // que ainda não estão carregados na lista: busca e insere na hora.
+          setContacts(prev => {
+            if (prev.some(c => c.id === newMessage.contact_id)) return prev;
+            supabase
+              .from('crm_contacts')
+              .select('*')
+              .eq('id', newMessage.contact_id)
+              .eq('user_id', currentUserIdRef.current)
+              .maybeSingle()
+              .then(({ data: freshContact }) => {
+                if (!freshContact) return;
+                setContacts(current => current.some(c => c.id === freshContact.id)
+                  ? current
+                  : deduplicateConversationContacts([freshContact, ...current]));
+              });
+            return prev;
+          });
+
           if (selectedContactRef.current && newMessage.contact_id === selectedContactRef.current.id) {
             setChatMessages(prev => {
               if (prev.find(m => m.id === newMessage.id)) return prev;
