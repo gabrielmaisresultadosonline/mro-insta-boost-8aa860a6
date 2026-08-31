@@ -7123,10 +7123,8 @@ const CRM = () => {
                       <CardContent className="p-0">
                         {/* Mobile cards */}
                         <div className="md:hidden divide-y">
-                          {allScheduledMessages.filter(m => m.status !== 'pending').length > 0 ? (
-                            allScheduledMessages.filter(m => m.status !== 'pending')
-                              .sort((a, b) => new Date(b.scheduled_for).getTime() - new Date(a.scheduled_for).getTime())
-                              .slice(0, 20)
+                          {scheduledHistory.length > 0 ? (
+                            scheduledHistory
                               .map((msg) => (
                               <div key={msg.id} className="p-4 flex flex-col gap-2">
                                 <div className="flex justify-between items-start gap-2">
