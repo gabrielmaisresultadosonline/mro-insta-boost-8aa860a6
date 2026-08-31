@@ -3353,7 +3353,34 @@ async function handleInternalSendMessage(supabase: any, phoneNumberId: string, a
 
     return jsonResponse({ success: false, ...normalizedError, metaError: result?.error || null }, 200);
   }
-  console.log(`[META-SEND] OK messageId=${result?.messages?.[0]?.id} to=${to} type=${payload.type}`);
+  const sentMessageId = result?.messages?.[0]?.id || null;
+  if (!sentMessageId) {
+    // A Meta respondeu 200 mas sem ID de mensagem: NÃO houve envio real.
+    console.error(`[META-SEND] Resposta 200 sem message id (envio não confirmado) to=${to} body=${JSON.stringify(result)}`);
+    if (contact && !params.skipLocalSave) {
+      const messageTypeNc = params.interactive ? 'interactive' : (media?.type || 'text');
+      const contentNc = media ? (params.text || `[${media.type}]`) : (params.interactive?.body?.text || params.text || '');
+      await supabase.from('crm_messages').insert({
+        contact_id: contact.id,
+        user_id: userId || contact.user_id || null,
+        direction: 'outbound',
+        message_type: messageTypeNc,
+        content: contentNc,
+        media_url: media?.url || null,
+        status: 'failed',
+        error_code: 'no_message_id',
+        error_message: 'A Meta não confirmou o envio (resposta sem ID de mensagem).',
+        metadata: { ...(params.metadata || {}), meta_raw_response: result || null },
+      });
+    }
+    return jsonResponse({
+      success: false,
+      code: 'no_message_id',
+      message: 'A Meta não confirmou o envio (resposta sem ID de mensagem).',
+      metaError: result?.error || null,
+    }, 200);
+  }
+  console.log(`[META-SEND] OK messageId=${sentMessageId} to=${to} type=${payload.type}`);
 
   if (contact && !params.skipLocalSave) {
     const messageType = params.interactive ? 'interactive' : (media?.type || 'text');
@@ -3637,6 +3664,30 @@ async function internalSendTemplate(
     }
 
     return jsonResponse({ success: false, ...normalizedError, metaError: result?.error || null }, 200);
+  }
+
+  const templateMessageId = result?.messages?.[0]?.id || null;
+  if (!templateMessageId) {
+    console.error(`[TEMPLATE] Resposta 200 sem message id (envio não confirmado) to=${normalizedTo} body=${JSON.stringify(result)}`);
+    if (contact) {
+      await supabase.from('crm_messages').insert({
+        contact_id: contact.id,
+        user_id: contact.user_id || userId || null,
+        direction: 'outbound',
+        message_type: 'template',
+        content: `[Template: ${templateName}]`,
+        status: 'failed',
+        error_code: 'no_message_id',
+        error_message: 'A Meta não confirmou o envio do template (resposta sem ID de mensagem).',
+        metadata: { template_name: templateName, broadcast_id: broadcastId || null, meta_raw_response: result || null },
+      });
+    }
+    return jsonResponse({
+      success: false,
+      code: 'no_message_id',
+      message: 'A Meta não confirmou o envio do template (resposta sem ID de mensagem).',
+      metaError: result?.error || null,
+    }, 200);
   }
 
   if (contact) {
