@@ -667,6 +667,83 @@ serve(async (req) => {
       return json({ success: true });
     }
 
+    /* ===================== Multi WhatsApp por cadastro ===================== */
+
+    if (action === "list_user_numbers") {
+      const { userId } = body as any;
+      if (!userId) return json({ success: false, error: "userId obrigatório" });
+
+      const { data: profile } = await supabase
+        .from("crm_profiles")
+        .select("max_whatsapp_numbers")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const { data: numbers, error } = await supabase
+        .from("crm_whatsapp_numbers")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true });
+      if (error) return json({ success: false, error: error.message });
+
+      return json({
+        success: true,
+        maxNumbers: Number((profile as any)?.max_whatsapp_numbers ?? 1) || 1,
+        numbers: numbers || [],
+      });
+    }
+
+    if (action === "set_max_numbers") {
+      const { userId, maxNumbers } = body as any;
+      if (!userId) return json({ success: false, error: "userId obrigatório" });
+      const value = Math.max(1, Math.min(20, Number(maxNumbers) || 1));
+
+      const { data: existing } = await supabase
+        .from("crm_profiles")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const { error } = existing
+        ? await supabase
+            .from("crm_profiles")
+            .update({ max_whatsapp_numbers: value })
+            .eq("user_id", userId)
+        : await supabase
+            .from("crm_profiles")
+            .insert({ user_id: userId, max_whatsapp_numbers: value });
+
+      if (error) return json({ success: false, error: error.message });
+      return json({ success: true, maxNumbers: value });
+    }
+
+    if (action === "update_user_number") {
+      const { numberId, label, accessPin } = body as any;
+      if (!numberId) return json({ success: false, error: "numberId obrigatório" });
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (label !== undefined) patch.label = label || null;
+      if (accessPin !== undefined) {
+        patch.access_pin = accessPin && String(accessPin).trim() ? String(accessPin).trim() : null;
+      }
+      const { error } = await supabase
+        .from("crm_whatsapp_numbers")
+        .update(patch)
+        .eq("id", numberId);
+      if (error) return json({ success: false, error: error.message });
+      return json({ success: true });
+    }
+
+    if (action === "delete_user_number") {
+      const { numberId } = body as any;
+      if (!numberId) return json({ success: false, error: "numberId obrigatório" });
+      const { error } = await supabase
+        .from("crm_whatsapp_numbers")
+        .delete()
+        .eq("id", numberId);
+      if (error) return json({ success: false, error: error.message });
+      return json({ success: true });
+    }
+
     if (action === "list_announcements") {
       const { data, error } = await supabase
         .from("admin_announcements")

@@ -134,6 +134,15 @@ import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import AnnouncementPopup from "@/components/AnnouncementPopup";
 import FirstTutorialVideo from "@/components/sales/FirstTutorialVideo";
+import { WhatsAppNumberSelector } from "@/components/crm/WhatsAppNumberSelector";
+import {
+  fetchMaxWhatsAppNumbers,
+  fetchUserNumbers,
+  getActiveNumberId,
+  setActiveNumberId as persistActiveNumberId,
+  syncSettingsIntoNumbers,
+  type WhatsAppNumberRecord,
+} from "@/lib/whatsappNumbers";
 
 const getCanonicalConversationPhone = (rawPhone: unknown): string => {
   const digits = String(rawPhone ?? '').replace(/\D/g, '');
@@ -440,6 +449,11 @@ const CRM = () => {
       try { localStorage.setItem('crm_active_tab', activeTab); } catch {}
     }, [activeTab]);
    const [userRole, setUserRole] = useState<string | null>(null);
+  // Multi-WhatsApp: quantidade liberada pelo admin e número ativo escolhido.
+  const [maxWhatsAppNumbers, setMaxWhatsAppNumbers] = useState<number>(1);
+  const [activeNumberId, setActiveNumberId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [userNumbersCount, setUserNumbersCount] = useState<number>(0);
   const [isMyDataOpen, setIsMyDataOpen] = useState(false);
   const [myDataEmail, setMyDataEmail] = useState('');
   const [myDataNewEmail, setMyDataNewEmail] = useState('');
@@ -2246,12 +2260,33 @@ const CRM = () => {
          setWhatsAppConnectionConfirmed(!!(settingsData.meta_access_token && settingsData.meta_phone_number_id && settingsData.meta_waba_id));
        }
  
-       const { data: profile } = await supabase
+        const { data: profile } = await supabase
          .from('crm_profiles')
          .select('role')
          .eq('user_id', user.id)
          .maybeSingle();
        if (profile) setUserRole(profile.role);
+
+       // Multi-WhatsApp: só ativa a tela de escolha para cadastros liberados
+       // pelo admin (crm_profiles.max_whatsapp_numbers > 1).
+       setCurrentUserId(user.id);
+       try {
+         const allowed = await fetchMaxWhatsAppNumbers(user.id);
+         setMaxWhatsAppNumbers(allowed);
+         if (allowed > 1) {
+           const numbers = settingsData
+             ? await syncSettingsIntoNumbers(user.id, settingsData)
+             : await fetchUserNumbers(user.id);
+           setUserNumbersCount(numbers.length);
+           const stored = getActiveNumberId(user.id);
+           const validStored = stored && numbers.some((n) => n.id === stored) ? stored : null;
+           setActiveNumberId(validStored);
+         } else {
+           setActiveNumberId(null);
+         }
+       } catch (multiError) {
+         console.warn('[CRM] multi-whatsapp indisponível:', multiError);
+       }
 
       const { data: metricsData } = await supabase
         .from('crm_metrics')
@@ -4831,6 +4866,27 @@ const CRM = () => {
 
   // Gate: usuário precisa conectar o WhatsApp antes de acessar conversas/CRM
   const isWhatsAppConnected = whatsAppConnectionConfirmed || !!(metaSettings.meta_access_token && metaSettings.meta_phone_number_id && metaSettings.meta_waba_id);
+
+  // Multi-WhatsApp habilitado: escolhe qual número abrir antes das conversas.
+  const multiNumberEnabled = maxWhatsAppNumbers > 1;
+  const handleSwitchNumber = () => {
+    if (!currentUserId) return;
+    persistActiveNumberId(currentUserId, null);
+    setActiveNumberId(null);
+  };
+  if (!loading && multiNumberEnabled && currentUserId && !activeNumberId) {
+    return (
+      <WhatsAppNumberSelector
+        userId={currentUserId}
+        maxNumbers={maxWhatsAppNumbers}
+        onSelected={(record: WhatsAppNumberRecord) => {
+          setActiveNumberId(record.id);
+          void fetchData(true);
+        }}
+        onConnectNew={startEmbeddedSignup}
+      />
+    );
+  }
   if (!loading && !isWhatsAppConnected) {
     return (
       <div className="min-h-screen w-full flex flex-col lg:flex-row items-center justify-center gap-6 bg-gradient-to-br from-[#0c1317] via-[#111b21] to-[#0c1317] p-6">
@@ -4906,6 +4962,17 @@ const CRM = () => {
     <SidebarProvider>
       <div className={`h-[100dvh] w-full flex overflow-hidden bg-[#f0f2f5] dark:bg-[#0c1317] ${crmTheme === 'light' ? 'crm-theme-light' : ''}`}>
         <AnnouncementPopup />
+        {multiNumberEnabled && (
+          <button
+            type="button"
+            onClick={handleSwitchNumber}
+            title="Trocar de WhatsApp"
+            className="fixed top-2 right-2 z-[90] h-9 px-3 rounded-lg bg-[#00a884] hover:bg-[#02916f] text-white text-[11px] sm:text-xs font-bold uppercase tracking-wide shadow-lg flex items-center gap-1.5"
+          >
+            <LucideIcons.RefreshCw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Trocar WhatsApp</span>
+          </button>
+        )}
         {whatsappDisconnected && (
           <div className="fixed top-0 left-0 right-0 z-[100] bg-red-600 text-white px-4 py-3 shadow-lg flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-medium">
