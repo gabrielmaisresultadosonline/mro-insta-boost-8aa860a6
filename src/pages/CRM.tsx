@@ -7167,10 +7167,8 @@ const CRM = () => {
                               </tr>
                             </thead>
                             <tbody className="divide-y">
-                              {allScheduledMessages.filter(m => m.status !== 'pending').length > 0 ? (
-                                allScheduledMessages.filter(m => m.status !== 'pending')
-                                  .sort((a, b) => new Date(b.scheduled_for).getTime() - new Date(a.scheduled_for).getTime())
-                                  .slice(0, 20)
+                              {scheduledHistory.length > 0 ? (
+                                scheduledHistory
                                   .map((msg) => (
                                   <tr key={msg.id} className="hover:bg-muted/20 transition-colors">
                                     <td className="px-6 py-4 font-bold">
