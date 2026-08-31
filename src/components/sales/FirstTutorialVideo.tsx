@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { resolveMediaUrl } from "@/lib/mediaUrl";
 import { BadgeCheck, PlayCircle, X, Loader2 } from "lucide-react";
 
 type Tutorial = {
@@ -54,7 +55,7 @@ export default function FirstTutorialVideo({
         <div className="flex items-stretch">
           <div className="relative w-28 sm:w-32 shrink-0 bg-slate-900" style={{ aspectRatio: "4/5" }}>
             {video.cover_url ? (
-              <img src={video.cover_url} alt={video.title} className="w-full h-full object-cover" />
+              <img src={resolveMediaUrl(video.cover_url)} alt={video.title} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-[#075E54] to-[#25D366]" />
             )}
@@ -101,8 +102,8 @@ export default function FirstTutorialVideo({
               </div>
             )}
             <video
-              src={video.video_url}
-              poster={video.cover_url || undefined}
+              src={resolveMediaUrl(video.video_url)}
+              poster={resolveMediaUrl(video.cover_url) || undefined}
               controls
               autoPlay
               playsInline
