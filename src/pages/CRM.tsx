@@ -172,14 +172,17 @@ const getLatestIsoValue = (first: unknown, second: unknown): string | null => {
 const compareConversationContacts = (a: any, b: any): number => {
   const now = Date.now();
   const windowDuration = 24 * 60 * 60 * 1000;
-  const aInbound = a?.last_message_received_at ? new Date(a.last_message_received_at).getTime() : 0;
-  const bInbound = b?.last_message_received_at ? new Date(b.last_message_received_at).getTime() : 0;
-  const aWindowOpen = aInbound > 0 && now - aInbound < windowDuration;
-  const bWindowOpen = bInbound > 0 && now - bInbound < windowDuration;
+  // Atividade recente inclui envios (disparo em massa/template), não apenas
+  // mensagens recebidas — assim campanhas aparecem no topo em tempo real.
+  const aActivity = getConversationActivityTime(a);
+  const bActivity = getConversationActivityTime(b);
+  const aRecent = aActivity > 0 && now - aActivity < windowDuration;
+  const bRecent = bActivity > 0 && now - bActivity < windowDuration;
 
-  if (aWindowOpen !== bWindowOpen) return aWindowOpen ? -1 : 1;
-  return getConversationActivityTime(b) - getConversationActivityTime(a);
+  if (aRecent !== bRecent) return aRecent ? -1 : 1;
+  return bActivity - aActivity;
 };
+
 
 const deduplicateConversationContacts = (rows: any[]): any[] => {
   const byConversation = new Map<string, any>();
