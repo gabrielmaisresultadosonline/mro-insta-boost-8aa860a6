@@ -1597,6 +1597,25 @@ const CRM = () => {
         if (payload.eventType === 'INSERT') {
           const newMessage: any = payload.new;
           if (!currentUserIdRef.current || newMessage.user_id !== currentUserIdRef.current) return;
+          // Disparos em massa/templates podem criar contatos novos (lista fria)
+          // que ainda não estão carregados na lista: busca e insere na hora.
+          setContacts(prev => {
+            if (prev.some(c => c.id === newMessage.contact_id)) return prev;
+            supabase
+              .from('crm_contacts')
+              .select('*')
+              .eq('id', newMessage.contact_id)
+              .eq('user_id', currentUserIdRef.current)
+              .maybeSingle()
+              .then(({ data: freshContact }) => {
+                if (!freshContact) return;
+                setContacts(current => current.some(c => c.id === freshContact.id)
+                  ? current
+                  : deduplicateConversationContacts([freshContact, ...current]));
+              });
+            return prev;
+          });
+
           if (selectedContactRef.current && newMessage.contact_id === selectedContactRef.current.id) {
             setChatMessages(prev => {
               if (prev.find(m => m.id === newMessage.id)) return prev;
