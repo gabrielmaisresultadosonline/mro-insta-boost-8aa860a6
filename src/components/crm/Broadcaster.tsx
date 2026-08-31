@@ -1382,6 +1382,17 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
                       >
                         Remover os fora das 24h
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setExcludedNumbers(prev => {
+                          const next = new Set(prev);
+                          candidateRecipients.forEach(r => { if (windowInfo.has(r.wa_id)) next.add(r.wa_id); });
+                          return next;
+                        })}
+                        className="text-[10px] underline text-[#8696a0] hover:text-[#e9edef]"
+                      >
+                        Remover os dentro das 24h
+                      </button>
                     </div>
                   )}
                   {showRecipients && (
