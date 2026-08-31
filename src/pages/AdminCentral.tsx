@@ -72,6 +72,58 @@ type DumpProgress = {
 
 const STORAGE_KEY = "admincentral_creds_v1";
 
+/**
+ * Chamada resiliente à Edge Function do admin.
+ * - Timeout explícito (evita o botão ficar "carregando" para sempre)
+ * - Fallback via fetch direto caso o SDK trave/erro de rede
+ */
+async function invokeAdminFn(body: Record<string, unknown>, timeoutMs = 30000): Promise<any> {
+  const withTimeout = <T,>(p: Promise<T>): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error("Tempo esgotado ao contatar o servidor. Tente novamente.")), timeoutMs)
+      ),
+    ]);
+
+  try {
+    const { data, error } = await withTimeout(
+      supabase.functions.invoke("crm-central-admin", { body }) as Promise<any>
+    );
+    if (error) throw error;
+    if (data) return data;
+    throw new Error("Resposta vazia do servidor");
+  } catch (sdkErr) {
+    // Fallback: fetch direto no endpoint público das functions
+    const baseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "");
+    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+    if (!baseUrl) throw sdkErr;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${baseUrl}/functions/v1/crm-central-admin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(text?.slice(0, 200) || `HTTP ${res.status}`);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+
 function ReportStat({
   icon,
   label,
