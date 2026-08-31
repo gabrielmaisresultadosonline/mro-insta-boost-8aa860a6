@@ -860,23 +860,32 @@ serve(async (req) => {
 
     if (action === "grant_access") {
       const { email, plan, days, resetPassword } = body as any;
-      if (!email || !plan) return json({ success: false, error: "email e plan obrigatórios" }, 400);
+      if (!email || !plan) return json({ success: false, error: "email e plan obrigatórios" });
       const PLANS: Record<string, { label: string; amount: number; days: number }> = {
         mensal: { label: "Plano Mensal", amount: 97, days: 30 },
         semestral: { label: "Plano 6 Meses", amount: 397, days: 180 },
         anual: { label: "Plano Anual (1 ano)", amount: 597, days: 365 },
       };
-      if (!PLANS[plan]) return json({ success: false, error: "Plano inválido" }, 400);
+      if (!PLANS[plan]) return json({ success: false, error: "Plano inválido" });
       const d = Number(days) || PLANS[plan].days;
+      const cleanEmailGrant = String(email).trim().toLowerCase();
       const { data: ok, error } = await supabase.rpc("grant_crm_access", {
-        p_email: email,
+        p_email: cleanEmailGrant,
         p_plan: plan,
         p_days: d,
       });
-      if (error) throw error;
-      if (ok === false) return json({ success: false, error: "Usuário não encontrado" }, 404);
+      if (error) {
+        console.error("[grant_access] rpc error:", error);
+        return json({ success: false, error: `Falha ao liberar acesso: ${error.message}` });
+      }
+      if (ok === false) {
+        return json({
+          success: false,
+          error: `Nenhuma conta cadastrada com o e-mail ${cleanEmailGrant}. Confira o e-mail usado no cadastro.`,
+        });
+      }
 
-      const cleanEmailGrant = String(email).trim().toLowerCase();
+
       // Localiza o usuário para pegar nome, data de expiração e (opcionalmente)
       // gerar uma senha temporária que vai junto no email de liberação.
       let grantUserId: string | null = null;
