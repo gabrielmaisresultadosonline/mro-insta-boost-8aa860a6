@@ -217,7 +217,7 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
     setRecipientSearch('');
     setShowRecipients(false);
     setOnly24h(false);
-  }, [targetType, selectedStatus]);
+  }, [targetType, selectedStatuses]);
 
   // Compute candidate recipients (with contact info) based on current target
   const candidateRecipients = useMemo(() => {
