@@ -654,7 +654,12 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
         if (sendResult?.success === false) {
           throw new Error(sendResult?.message || sendResult?.error || 'A Meta recusou o envio');
         }
-        
+        // Só consideramos enviado quando a Meta devolve um ID de mensagem real.
+        // Fluxos (startFlow) não retornam messageId único, por isso são exceção.
+        if (type !== 'flow' && !sendResult?.messageId) {
+          throw new Error('A Meta não confirmou o envio (sem ID de mensagem)');
+        }
+
         await supabase.from('crm_broadcasts')
           .update({ sent_count: i + 1 })
           .eq('id', broadcastId);
@@ -670,6 +675,29 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
     }
     
     await supabase.from('crm_broadcasts').update({ status: 'completed' }).eq('id', broadcastId);
+
+    // Conferência real de entrega: a Meta confirma via webhook (sent/delivered/read/failed).
+    // Damos um tempo para os status chegarem e reportamos o resultado verdadeiro.
+    try {
+      await new Promise(resolve => setTimeout(resolve, 15000));
+      const { data: sentMessages } = await supabase
+        .from('crm_messages')
+        .select('status')
+        .contains('metadata', { broadcast_id: broadcastId });
+
+      if (sentMessages && sentMessages.length > 0) {
+        const confirmed = sentMessages.filter(m => ['sent', 'delivered', 'read'].includes(String(m.status))).length;
+        const failed = sentMessages.filter(m => String(m.status) === 'failed').length;
+        const pending = sentMessages.length - confirmed - failed;
+        toast({
+          title: 'Conferência de entrega',
+          description: `${confirmed} confirmadas pela Meta • ${failed} falharam • ${pending} aguardando confirmação.`,
+          variant: failed > 0 ? 'destructive' : 'default',
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao conferir entregas do disparo:', err);
+    }
 
     // Apply etiqueta (tag) to all contacts in this broadcast, if selected
     if (applyTag) {
