@@ -142,7 +142,9 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
   const [name, setName] = useState('');
   const [type, setType] = useState<'message' | 'template' | 'flow'>('message');
   const [targetType, setTargetType] = useState<'contacts' | 'conversation' | 'uploaded' | 'tag' | 'tag_24h'>('contacts');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  // Múltiplas etiquetas podem ser combinadas no público "Por Etiqueta (Status)".
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const selectedStatus = selectedStatuses[0] || '';
   const [selectedTags24h, setSelectedTags24h] = useState<string[]>([]);
   const [messageText, setMessageText] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
