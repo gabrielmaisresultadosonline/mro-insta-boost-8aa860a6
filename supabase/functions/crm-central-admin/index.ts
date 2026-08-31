@@ -473,14 +473,51 @@ serve(async (req) => {
 
     if (action === "set_password") {
       const { userId, newPassword } = body as any;
-      if (!userId || !newPassword || newPassword.length < 6) {
+      const pwd = typeof newPassword === "string" ? newPassword.trim() : "";
+      if (!userId || pwd.length < 6) {
         return json({ success: false, error: "Senha inválida (mínimo 6 caracteres)" });
       }
-      const { error } = await supabase.auth.admin.updateUserById(userId, {
-        password: newPassword,
-      });
-      if (error) throw error;
-      return json({ success: true });
+
+      // 1ª tentativa: SDK admin. Em instalações self-hosted o SDK às vezes
+      // falha silenciosamente (proxy/URL interna), por isso há o fallback REST.
+      let sdkError: string | null = null;
+      try {
+        const { error } = await supabase.auth.admin.updateUserById(userId, { password: pwd });
+        if (!error) return json({ success: true });
+        sdkError = error.message;
+      } catch (e: any) {
+        sdkError = e?.message || "Falha no SDK";
+      }
+      console.error("[set_password] SDK falhou:", sdkError);
+
+      // 2ª tentativa: chamada direta ao GoTrue com a service role key.
+      try {
+        const base = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/+$/, "");
+        const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+        const res = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({ password: pwd }),
+        });
+        const raw = await res.text();
+        if (res.ok) return json({ success: true });
+        console.error("[set_password] GoTrue falhou:", res.status, raw);
+        let detail = raw;
+        try {
+          const parsed = JSON.parse(raw);
+          detail = parsed?.msg || parsed?.message || parsed?.error_description || raw;
+        } catch { /* mantém texto cru */ }
+        return json({ success: false, error: `Não foi possível trocar a senha: ${detail || sdkError}` });
+      } catch (e: any) {
+        return json({
+          success: false,
+          error: `Não foi possível trocar a senha: ${e?.message || sdkError || "erro desconhecido"}`,
+        });
+      }
     }
 
     if (action === "impersonate") {

@@ -826,16 +826,23 @@ export default function AdminCentral() {
 
   async function savePassword() {
     if (!pwdTarget) return;
-    if (newPwd.length < 6) {
+    const pwd = newPwd.trim();
+    if (pwd.length < 6) {
       toast.error("Senha deve ter no mínimo 6 caracteres");
       return;
     }
     setSavingPwd(true);
     try {
-      await call("set_password", { userId: pwdTarget.id, newPassword: newPwd });
-      toast.success("Senha redefinida — copie e envie ao usuário");
+      await call("set_password", { userId: pwdTarget.id, newPassword: pwd });
+      try {
+        await navigator.clipboard.writeText(pwd);
+      } catch {
+        /* clipboard pode estar bloqueado; não é crítico */
+      }
+      toast.success(`Senha de ${pwdTarget.email} alterada e copiada`);
+      setPwdDialogOpen(false);
     } catch (err: any) {
-      toast.error(err.message || "Erro");
+      toast.error(err.message || "Erro ao trocar a senha");
     } finally {
       setSavingPwd(false);
     }
