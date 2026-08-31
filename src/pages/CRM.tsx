@@ -5982,6 +5982,14 @@ const CRM = () => {
                             Nenhum contato encontrado
                           </div>
                         )}
+
+                        {/* Sentinela: amplia a janela de contatos ao chegar no fim da rolagem. */}
+                        {hasMoreContactsToRender && (
+                          <div ref={contactsSentinelRef} className="p-4 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+                            <div className="h-3 w-3 rounded-full border-2 border-[#00a884] border-t-transparent animate-spin" />
+                            Carregando mais contatos...
+                          </div>
+                        )}
                       </ScrollArea>
                     </div>
                     
