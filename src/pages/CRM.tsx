@@ -831,9 +831,36 @@ const CRM = () => {
     }
   }, [addConnectionLog, toast]);
 
+  // Relógio usado pelos contadores regressivos (janela de 24h, timeout de
+  // fluxo, próxima ação). Ele força um re-render por segundo, então é pausado
+  // enquanto a aba está em segundo plano — no celular isso evita que o
+  // navegador fique processando a árvore inteira do CRM sem ninguém olhando.
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
+    let interval: number | undefined;
+
+    const start = () => {
+      if (interval !== undefined) return;
+      setNow(Date.now());
+      interval = window.setInterval(() => setNow(Date.now()), 1000);
+    };
+
+    const stop = () => {
+      if (interval === undefined) return;
+      window.clearInterval(interval);
+      interval = undefined;
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    };
+
+    handleVisibility();
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      stop();
+    };
   }, []);
 
   // Meta Embedded Signup (WhatsApp Tech Provider) ---------------------------
