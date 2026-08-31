@@ -430,7 +430,9 @@ CREATE TABLE IF NOT EXISTS public.crm_profiles (
   access_until timestamp with time zone,
   is_paid boolean DEFAULT false NOT NULL,
   plan text,
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  CONSTRAINT crm_profiles_user_id_key UNIQUE (user_id)
+
 );
 
 CREATE TABLE IF NOT EXISTS public.crm_sales_orders (
