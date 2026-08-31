@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, Lock, MessageSquare, Plus, ShieldCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
+
 import { toast } from "sonner";
 import {
   activateNumber,
@@ -105,7 +105,9 @@ export function WhatsAppNumberSelector({
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-white">Qual WhatsApp você quer abrir?</h1>
           <p className="text-white/50 text-sm mt-2">
-            Este cadastro tem {maxNumbers} número(s) liberado(s). Escolha um para entrar nas conversas.
+            {maxNumbers > 1
+              ? `Este cadastro tem ${maxNumbers} número(s) liberado(s). Escolha um para entrar nas conversas.`
+              : "Escolha o WhatsApp conectado para entrar nas conversas. Você pode proteger o acesso com uma senha."}
           </p>
         </div>
 
@@ -167,22 +169,25 @@ export function WhatsAppNumberSelector({
               </div>
             ))}
 
-            <button
-              type="button"
-              onClick={onConnectNew}
-              disabled={!canConnectMore}
-              className={cn(
-                "w-full h-12 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition",
-                canConnectMore
-                  ? "bg-[#1877F2] hover:bg-[#1465c8] text-white"
-                  : "bg-white/5 text-white/30 cursor-not-allowed"
-              )}
-            >
-              <Plus className="w-4 h-4" />
-              {canConnectMore
-                ? "Conectar mais um WhatsApp"
-                : "Limite de números atingido — fale com o suporte"}
-            </button>
+            {canConnectMore ? (
+              <button
+                type="button"
+                onClick={onConnectNew}
+                className="w-full h-12 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition bg-[#1877F2] hover:bg-[#1465c8] text-white"
+              >
+                <Plus className="w-4 h-4" />
+                Conectar mais um WhatsApp
+              </button>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-[#111b21] p-4 text-center">
+                <p className="text-white/70 text-sm font-medium">
+                  Precisa conectar outro número?
+                </p>
+                <p className="text-white/40 text-xs mt-1">
+                  Entre em contato com o nosso suporte para liberar mais WhatsApps neste cadastro.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

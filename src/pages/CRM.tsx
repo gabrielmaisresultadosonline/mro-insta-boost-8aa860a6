@@ -2267,23 +2267,20 @@ const CRM = () => {
          .maybeSingle();
        if (profile) setUserRole(profile.role);
 
-       // Multi-WhatsApp: só ativa a tela de escolha para cadastros liberados
-       // pelo admin (crm_profiles.max_whatsapp_numbers > 1).
+       // Multi-WhatsApp: a tela de escolha aparece para todos os cadastros com
+       // pelo menos um número conectado. Quem não tem liberação extra vê apenas
+       // o número atual + o aviso de contato com o suporte.
        setCurrentUserId(user.id);
        try {
          const allowed = await fetchMaxWhatsAppNumbers(user.id);
          setMaxWhatsAppNumbers(allowed);
-         if (allowed > 1) {
-           const numbers = settingsData
-             ? await syncSettingsIntoNumbers(user.id, settingsData)
-             : await fetchUserNumbers(user.id);
-           setUserNumbersCount(numbers.length);
-           const stored = getActiveNumberId(user.id);
-           const validStored = stored && numbers.some((n) => n.id === stored) ? stored : null;
-           setActiveNumberId(validStored);
-         } else {
-           setActiveNumberId(null);
-         }
+         const numbers = settingsData
+           ? await syncSettingsIntoNumbers(user.id, settingsData)
+           : await fetchUserNumbers(user.id);
+         setUserNumbersCount(numbers.length);
+         const stored = getActiveNumberId(user.id);
+         const validStored = stored && numbers.some((n) => n.id === stored) ? stored : null;
+         setActiveNumberId(validStored);
        } catch (multiError) {
          console.warn('[CRM] multi-whatsapp indisponível:', multiError);
        }
@@ -4874,7 +4871,7 @@ const CRM = () => {
     persistActiveNumberId(currentUserId, null);
     setActiveNumberId(null);
   };
-  if (!loading && multiNumberEnabled && currentUserId && !activeNumberId) {
+  if (!loading && currentUserId && isWhatsAppConnected && !activeNumberId) {
     return (
       <WhatsAppNumberSelector
         userId={currentUserId}
@@ -4962,7 +4959,7 @@ const CRM = () => {
     <SidebarProvider>
       <div className={`h-[100dvh] w-full flex overflow-hidden bg-[#f0f2f5] dark:bg-[#0c1317] ${crmTheme === 'light' ? 'crm-theme-light' : ''}`}>
         <AnnouncementPopup />
-        {multiNumberEnabled && (
+        {(multiNumberEnabled || userNumbersCount > 1) && (
           <button
             type="button"
             onClick={handleSwitchNumber}
