@@ -4656,15 +4656,42 @@ async function fetchAndStoreIncomingMedia(
 
         let updErr: any = null
         if (userId) {
-          const { data: existingSettings } = await supabase
+          // Atualiza primeiro pelo id existente. Isso mantém o OAuth funcional
+          // até mesmo durante rollout em uma VPS que ainda não aplicou a UNIQUE
+          // de user_id; a migração 085 garante a unicidade para os próximos
+          // upserts e elimina registros legados duplicados.
+          const { data: existingSettings, error: lookupErr } = await supabase
             .from('crm_settings')
-            .select('webhook_identifier')
+            .select('id, webhook_identifier')
             .eq('user_id', userId)
+            .order('updated_at', { ascending: false })
+            .limit(1)
             .maybeSingle()
-          const result = await supabase
-            .from('crm_settings')
-            .upsert({ ...patch, user_id: userId, webhook_identifier: existingSettings?.webhook_identifier || crypto.randomUUID(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-          updErr = result.error
+
+          if (lookupErr) {
+            updErr = lookupErr
+          } else if (existingSettings?.id) {
+            const result = await supabase
+              .from('crm_settings')
+              .update({
+                ...patch,
+                webhook_identifier: existingSettings.webhook_identifier || crypto.randomUUID(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existingSettings.id)
+              .eq('user_id', userId)
+            updErr = result.error
+          } else {
+            const result = await supabase
+              .from('crm_settings')
+              .insert({
+                ...patch,
+                user_id: userId,
+                webhook_identifier: crypto.randomUUID(),
+                updated_at: new Date().toISOString(),
+              })
+            updErr = result.error
+          }
           console.log('[Embedded Signup] settings upsert result', { ok: !updErr, error: updErr?.message || null, user_id: userId })
         } else {
           const result = await supabase

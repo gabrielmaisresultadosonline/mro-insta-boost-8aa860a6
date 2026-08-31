@@ -311,8 +311,11 @@ ok "cron apontando para ${CRON_URL} (jobs com Supabase restantes: ${sobrou_supab
 
 # depois de garantir roles/senhas, os serviços que conectam no banco precisam
 # reconectar (PostgREST fica em Restarting se subiu antes das roles existirem)
-info "reiniciando serviços que dependem do banco…"
-( cd "$STACK" && docker compose restart rest auth storage realtime >/dev/null 2>&1 ) || true
+info "reiniciando serviços que dependem do banco e recarregando o gateway…"
+# O gateway usa nginx.conf montado como bind mount. `docker compose up -d` não
+# reinicia um container já existente quando apenas esse arquivo muda; sem o
+# restart, a correção de Upgrade/Host do WebSocket não entra em vigor.
+( cd "$STACK" && docker compose restart rest auth storage realtime gateway >/dev/null 2>&1 ) || true
 sleep 5
 
 # -------------------------------------------------------------- 6) functions --
