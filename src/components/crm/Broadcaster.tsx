@@ -142,7 +142,9 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
   const [name, setName] = useState('');
   const [type, setType] = useState<'message' | 'template' | 'flow'>('message');
   const [targetType, setTargetType] = useState<'contacts' | 'conversation' | 'uploaded' | 'tag' | 'tag_24h'>('contacts');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  // Múltiplas etiquetas podem ser combinadas no público "Por Etiqueta (Status)".
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const selectedStatus = selectedStatuses[0] || '';
   const [selectedTags24h, setSelectedTags24h] = useState<string[]>([]);
   const [messageText, setMessageText] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
@@ -215,7 +217,7 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
     setRecipientSearch('');
     setShowRecipients(false);
     setOnly24h(false);
-  }, [targetType, selectedStatus]);
+  }, [targetType, selectedStatuses]);
 
   // Compute candidate recipients (with contact info) based on current target
   const candidateRecipients = useMemo(() => {
@@ -229,8 +231,8 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
     if (targetType === 'contacts') {
       return contacts.map(c => ({ wa_id: c.wa_id, name: c.name || c.wa_id }));
     }
-    if (targetType === 'tag' && selectedStatus) {
-      return contacts.filter(c => c.status === selectedStatus).map(c => ({ wa_id: c.wa_id, name: c.name || c.wa_id }));
+    if (targetType === 'tag' && selectedStatuses.length > 0) {
+      return contacts.filter(c => selectedStatuses.includes(c.status)).map(c => ({ wa_id: c.wa_id, name: c.name || c.wa_id }));
     }
     if (targetType === 'tag_24h') {
       if (selectedTags24h.length === 0) return [];
@@ -249,7 +251,7 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
         .map(wa => ({ wa_id: wa, name: wa }));
     }
     return [];
-  }, [targetType, selectedStatus, contacts, uploadedNumbers, conversationTagFilter, selectedTags24h]);
+  }, [targetType, selectedStatuses, contacts, uploadedNumbers, conversationTagFilter, selectedTags24h]);
 
   /** Reescreve a caixa de números já corrigidos (55 + 9º dígito), sem duplicados. */
   const normalizeUploadedList = async (raw?: string) => {
@@ -503,8 +505,8 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
         // Lista Geral/Etiqueta/Upload
         let potentialNumbers: string[] = curated;
         if (targetType === 'tag') {
-          if (!selectedStatus) {
-            toast({ title: "Selecione uma etiqueta", variant: "destructive" });
+          if (selectedStatuses.length === 0) {
+            toast({ title: "Selecione ao menos uma etiqueta", variant: "destructive" });
             setLoading(false);
             return;
           }
@@ -1208,18 +1210,56 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
               )}
 
               {targetType === 'tag' && (
-                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <Label className="text-xs md:text-sm">Selecione a Etiqueta</Label>
-                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                    <SelectTrigger className="h-10 md:h-11 rounded-xl bg-[#202c33] border-none text-[#e9edef] text-xs md:text-sm">
-                      <SelectValue placeholder="Escolha uma etiqueta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statuses.map(s => (
-                        <SelectItem key={s.id} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 p-3 bg-[#202c33] rounded-xl border border-white/5">
+                  <Label className="text-xs md:text-sm flex items-center gap-2 text-white">
+                    <Bookmark className="w-3.5 h-3.5 text-[#00a884]" /> Selecione uma ou mais Etiquetas
+                  </Label>
+                  <p className="text-[10px] text-white/40">
+                    Você pode combinar várias etiquetas — os contatos de todas elas entram no mesmo disparo (sem duplicar).
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {statuses.length === 0 && (
+                      <span className="text-[10px] text-white/40 italic">Nenhuma etiqueta cadastrada.</span>
+                    )}
+                    {statuses.map((s: any) => {
+                      const val = s.value || s.name;
+                      const active = selectedStatuses.includes(val);
+                      return (
+                        <button
+                          key={s.id || val}
+                          type="button"
+                          onClick={() =>
+                            setSelectedStatuses(prev =>
+                              prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]
+                            )
+                          }
+                          className={cn(
+                            "px-2.5 py-1 rounded-full text-[10px] md:text-xs font-medium border transition-all",
+                            active
+                              ? "bg-[#00a884] text-white border-[#00a884]"
+                              : "bg-transparent text-white/70 border-white/15 hover:border-[#00a884]/60"
+                          )}
+                          style={active && s.color ? { backgroundColor: s.color, borderColor: s.color } : undefined}
+                        >
+                          {s.label || s.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedStatuses.length > 0 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-white/5 mt-2">
+                      <span className="text-[10px] text-[#00a884]">
+                        ✓ {finalRecipients.length} contato(s) selecionado(s)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStatuses([])}
+                        className="text-[10px] underline text-white/50 hover:text-white"
+                      >
+                        Limpar etiquetas
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1341,6 +1381,17 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
                         className="text-[10px] underline text-[#8696a0] hover:text-[#e9edef]"
                       >
                         Remover os fora das 24h
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExcludedNumbers(prev => {
+                          const next = new Set(prev);
+                          candidateRecipients.forEach(r => { if (windowInfo.has(r.wa_id)) next.add(r.wa_id); });
+                          return next;
+                        })}
+                        className="text-[10px] underline text-[#8696a0] hover:text-[#e9edef]"
+                      >
+                        Remover os dentro das 24h
                       </button>
                     </div>
                   )}
