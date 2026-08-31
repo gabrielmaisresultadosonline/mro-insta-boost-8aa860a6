@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Play, ExternalLink, BookOpen, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { resolveMediaUrl } from "@/lib/mediaUrl";
 
 type Module = {
   id: string;
@@ -189,8 +190,8 @@ export default function SalesTutorials({ variant = "light" }: SalesTutorialsProp
                       </div>
                     )}
                     <video
-                      src={active.video_url}
-                      poster={active.cover_url || undefined}
+                      src={resolveMediaUrl(active.video_url)}
+                      poster={resolveMediaUrl(active.cover_url) || undefined}
                       controls
                       autoPlay
                       playsInline
@@ -267,7 +268,7 @@ function ModuleSection({
       {/* Module banner */}
       {module?.cover_url ? (
         <div className="relative rounded-2xl overflow-hidden mb-5 aspect-[16/9] sm:aspect-[21/9] shadow-lg">
-          <img src={module.cover_url} alt={module.name} className="w-full h-full object-cover" />
+          <img src={resolveMediaUrl(module.cover_url)} alt={module.name} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10" />
           <div className="absolute inset-x-0 bottom-0 p-5 md:p-8">
             <h3 className="text-white text-2xl md:text-4xl font-bold drop-shadow-lg">{module.name}</h3>
@@ -311,7 +312,7 @@ function ModuleSection({
             <div className="relative bg-slate-900" style={{ aspectRatio: "4/5" }}>
               {v.cover_url ? (
                 <img
-                  src={v.cover_url}
+                  src={resolveMediaUrl(v.cover_url)}
                   alt={v.title}
                   loading="lazy"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
