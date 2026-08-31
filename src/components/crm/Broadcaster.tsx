@@ -231,8 +231,8 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
     if (targetType === 'contacts') {
       return contacts.map(c => ({ wa_id: c.wa_id, name: c.name || c.wa_id }));
     }
-    if (targetType === 'tag' && selectedStatus) {
-      return contacts.filter(c => c.status === selectedStatus).map(c => ({ wa_id: c.wa_id, name: c.name || c.wa_id }));
+    if (targetType === 'tag' && selectedStatuses.length > 0) {
+      return contacts.filter(c => selectedStatuses.includes(c.status)).map(c => ({ wa_id: c.wa_id, name: c.name || c.wa_id }));
     }
     if (targetType === 'tag_24h') {
       if (selectedTags24h.length === 0) return [];
