@@ -505,8 +505,8 @@ const Broadcaster = ({ templates, flows, contacts, statuses }: BroadcasterProps)
         // Lista Geral/Etiqueta/Upload
         let potentialNumbers: string[] = curated;
         if (targetType === 'tag') {
-          if (!selectedStatus) {
-            toast({ title: "Selecione uma etiqueta", variant: "destructive" });
+          if (selectedStatuses.length === 0) {
+            toast({ title: "Selecione ao menos uma etiqueta", variant: "destructive" });
             setLoading(false);
             return;
           }
