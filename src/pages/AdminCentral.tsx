@@ -90,10 +90,25 @@ async function invokeAdminFn(body: Record<string, unknown>, timeoutMs = 30000): 
     const { data, error } = await withTimeout(
       supabase.functions.invoke("crm-central-admin", { body }) as Promise<any>
     );
-    if (error) throw error;
+    if (error) {
+      // A SDK converte QUALQUER status !=2xx em "non-2xx status code" e esconde
+      // a mensagem real. Lemos o corpo da resposta para devolver o erro correto.
+      const ctx: any = (error as any)?.context;
+      if (ctx && typeof ctx.text === "function") {
+        try {
+          const raw = await ctx.text();
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") return parsed;
+        } catch {
+          /* segue para o fallback */
+        }
+      }
+      throw error;
+    }
     if (data) return data;
     throw new Error("Resposta vazia do servidor");
   } catch (sdkErr) {
+
     // Fallback: fetch direto no endpoint público das functions
     const baseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "");
     const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
